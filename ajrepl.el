@@ -154,6 +154,11 @@
     (when (and start end)
       (ajrepl-send-region start end))))
 
+(defun ajrepl-set-pretty-format ()
+  "Set :pretty-format to multiline."
+  (interactive)
+  (ajrepl-send-code "(setdyn :pretty-format \"%.20M\")"))
+
 (defun ajrepl-insert-last-output ()
   "Insert last evaluation result."
   (interactive)
@@ -188,6 +193,7 @@
         ["Insert last output" ajrepl-insert-last-output t]
         "--"
         ["Start REPL" ajrepl t]
+        ["Multiline Formatting" ajrepl-set-pretty-format t]
         ["Switch to REPL" ajrepl-switch-to-repl t]))
     map)
   "Ajrepl interaction mode map.")
