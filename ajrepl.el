@@ -2,7 +2,7 @@
 
 ;; Author: sogaiu
 ;; Version: 20201226
-;; Package-Requires: ((smartparens "1.11.0") (emacs "26.2"))
+;; Package-Requires: ((emacs "26.2"))
 ;; Keywords: janet repl
 
 ;; This file is not part of GNU Emacs.
@@ -15,12 +15,7 @@
 
 ;;;;; Manual
 
-;; Ensure this file and the following dependencies (and their
-;; dependencies) are in your load-path:
-;;
-;;   smartparens
-;;
-;;  and put this in your relevant init file:
+;;  Put this in your relevant init file:
 ;;
 ;;    (require 'ajrepl)
 ;;
@@ -67,7 +62,7 @@
 ;;
 ;;   emacs
 ;;   janet
-;;   smartparens
+;;   tree-sitter
 ;;
 ;; and transitively involved folks too ;)
 
@@ -91,7 +86,6 @@
 ;;;; Requirements
 
 (require 'comint)
-(require 'smartparens) ; XXX: is this still necessary?
 (require 'subr-x)
 
 ;;;; The Rest
@@ -151,13 +145,12 @@
   (interactive)
   (ajrepl-send-region (point-min) (point-max)))
 
-;; XXX: figure out how to do this without smartparens
 (defun ajrepl-send-expression-at-point ()
   "Send expression at point."
   (interactive)
-  (let* ((thing (sp-get-thing t))
-         (start (sp-get thing :beg))
-         (end (sp-get thing :end)))
+  (let* ((bounds (bounds-of-thing-at-point 'sexp))
+         (start (car bounds))
+         (end (cdr bounds)))
     (when (and start end)
       (ajrepl-send-region start end))))
 
