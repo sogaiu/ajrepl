@@ -63,5 +63,14 @@
           (switch-to-buffer (get-buffer ajrepl-repl-buffer-name))
           (ajrepl-send-code (format "(doc %s)" node-text)))))))
 
+(define-key-after
+  ajrepl-interaction-mode-map
+  [menu-bar Ajrepl ajrepl-ts-show-doc-new-frame-item]
+  '(menu-item "Show doc in new frame" ajrepl-ts-doc-new-frame
+              :help "Show doc in new frame"))
+
+(define-key ajrepl-interaction-mode-map
+  "\C-c\C-d" 'ajrepl-ts-doc-new-frame)
+
 (provide 'ajrepl-tree-sitter)
 ;;; ajrepl-tree-sitter ends here
