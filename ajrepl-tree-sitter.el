@@ -65,9 +65,13 @@
 
 (define-key-after
   ajrepl-interaction-mode-map
+  [menu-bar Ajrepl ajrepl-ts-separator] ; XXX: need to keep changing the last element?
+  '(menu-item "--"))
+
+(define-key-after
+  ajrepl-interaction-mode-map
   [menu-bar Ajrepl ajrepl-ts-show-doc-new-frame-item]
-  '(menu-item "Show doc in new frame" ajrepl-ts-doc-new-frame
-              :help "Show doc in new frame"))
+  '(menu-item "Show doc in new frame" ajrepl-ts-doc-new-frame))
 
 (define-key ajrepl-interaction-mode-map
   "\C-c\C-d" 'ajrepl-ts-doc-new-frame)
