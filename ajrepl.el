@@ -36,15 +36,15 @@
 
 ;; TODO :)
 
-;;;;; Usage
+;;;; Usage
 
-;; 0. Start up a Janet project
+;; 0. Open a Janet file
 
-;; 1. Connect to the Janet repl by:
+;; 1. Start an interactive REPL for Janet by:
 ;;
 ;;      M-x ajrepl
 ;;
-;;    A buffer for interaction with the Janet repl should appear.
+;;    A buffer for a Janet repl should appear.
 
 ;; 2. For editor features, in a relevant buffer with a Janet source file:
 ;;
@@ -56,6 +56,9 @@
 ;;      Send expression at point
 ;;      Send region
 ;;
+;;      Insert last output
+;;
+;;      Start REPL
 ;;      Switch to REPL
 
 ;;;;; Acknowledgments
@@ -88,7 +91,7 @@
 ;;;; Requirements
 
 (require 'comint)
-(require 'smartparens)
+(require 'smartparens) ; XXX: is this still necessary?
 (require 'subr-x)
 
 ;;;; The Rest
