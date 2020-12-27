@@ -154,6 +154,12 @@
     (when (and start end)
       (ajrepl-send-region start end))))
 
+(defun ajrepl-repl-buffer-new-frame ()
+  "Create a new frame and switch the repl buffer in it."
+  (interactive)
+  (select-frame-set-input-focus (make-frame-command))
+  (switch-to-buffer (get-buffer ajrepl-repl-buffer-name)))
+
 (defun ajrepl-set-pretty-format ()
   "Set :pretty-format to multiline."
   (interactive)
@@ -182,6 +188,7 @@
     (define-key map "\C-x\C-e" 'ajrepl-send-expression-at-point)
     (define-key map "\C-c\C-r" 'ajrepl-send-region)
     (define-key map "\C-c\C-i" 'ajrepl-insert-last-output)
+    (define-key map "\C-c\C-n" 'ajrepl-repl-buffer-new-frame)
     (define-key map "\C-c\C-z" 'ajrepl-switch-to-repl)
     (easy-menu-define ajrepl-interaction-mode-map map
       "A Janet REPL Interaction Mode Menu"
@@ -194,6 +201,7 @@
         "--"
         ["Start REPL" ajrepl t]
         ["Multiline Formatting" ajrepl-set-pretty-format t]
+        ["New Frame with REPL" ajrepl-repl-buffer-new-frame t]
         ["Switch to REPL" ajrepl-switch-to-repl t]))
     map)
   "Ajrepl interaction mode map.")
