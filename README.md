@@ -54,6 +54,8 @@ is likely:
     (add-to-list 'load-path
                  (expand-file-name "~/src/ajrepl"))
 
+    (require 'ajrepl)
+
     (add-hook 'janet-mode-hook
               #'ajrepl-interaction-mode)
     ```
