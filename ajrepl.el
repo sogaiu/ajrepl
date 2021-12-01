@@ -25,7 +25,12 @@
 ;;              #'ajrepl-interaction-mode)
 ;;
 ;;  for editor features to be enabled when visiting a buffer with
-;;  janet code in it
+;;  janet code in it.
+;;
+;;  If you use, a-janet-mode, you can add the following instead:
+;;
+;;    (add-hook 'a-janet-mode-hook
+;;              #'ajrepl-interaction-mode)
 
 ;;;;; Automatic
 
@@ -62,7 +67,6 @@
 ;;
 ;;   emacs
 ;;   janet
-;;   tree-sitter
 ;;
 ;; and transitively involved folks too ;)
 
@@ -86,40 +90,9 @@
 ;;;; Requirements
 
 (require 'comint)
-(require 'subr-x)
+(require 'ajrepl-core)
 
 ;;;; The Rest
-
-(defgroup ajrepl nil
-  "A Janet REPL"
-  :prefix "ajrepl-"
-  :group 'applications)
-
-(defvar ajrepl-repl-buffer-name "*ajrepl-repl*"
-  "Name of repl buffer.")
-
-(defun ajrepl-switch-to-repl ()
-  "Switch to the repl buffer named by `ajrepl-repl-buffer-name`."
-  (interactive)
-  (pop-to-buffer ajrepl-repl-buffer-name))
-
-(defun ajrepl-send-code (code-str)
-  "Send CODE-STR, a Lisp form."
-  (interactive "sCode: ")
-  (let ((here (point))
-        (original-buffer (current-buffer))
-        (repl-buffer (get-buffer ajrepl-repl-buffer-name)))
-    (if (not repl-buffer)
-        (message (format "%s is missing..." ajrepl-repl-buffer-name))
-      ;; switch to ajrepl buffer to prepare for appending
-      (set-buffer repl-buffer)
-      (goto-char (point-max))
-      (insert code-str)
-      (comint-send-input)
-      (set-buffer original-buffer)
-      (if (eq original-buffer repl-buffer)
-          (goto-char (point-max))
-        (goto-char here)))))
 
 (defun ajrepl-send-region (start end)
   "Send a region bounded by START and END."
@@ -145,17 +118,115 @@
   (interactive)
   (ajrepl-send-region (point-min) (point-max)))
 
+;; XXX: better to support more than just paren expressions -- e.g. symbols
+(defvar ajrepl--helper-path
+  (expand-file-name
+   (concat (expand-file-name
+	    (file-name-directory (or load-file-name
+				     buffer-file-name)))
+	   "ajrepl/last-expression.janet"))
+  "Path to helper program to determine last paren expression.")
+
+(defvar ajrepl--debug-output
+  nil
+  "If non-nil, output debug info to *Messages* buffer.")
+
+(defun ajrepl--helper (start end)
+  "Determine last paren expression by asking Janet.
+
+A region bounded by START and END is sent to a helper program."
+  (interactive "r")
+  (condition-case err
+      (let ((temp-buffer (generate-new-buffer
+                          (concat (if ajrepl--debug-output
+                                      ""
+                                    " ")
+                                  "*ajrepl-helper*")))
+            (result nil))
+        (save-excursion
+          (when ajrepl--debug-output
+            (message "region: %S"
+                     (buffer-substring-no-properties start end)))
+          (call-process-region start end
+                               "janet"
+                               ;; https://emacs.stackexchange.com/a/54353
+                               nil `(,temp-buffer nil) nil
+                               ajrepl--helper-path)
+          (set-buffer temp-buffer)
+          (setq result
+                (buffer-substring-no-properties (point-min) (point-max)))
+          (when ajrepl--debug-output
+            (message "ajrepl: %S" result))
+          ;; https://emacs.stackexchange.com/a/14599
+          (if (string-match "^[\0-\377[:nonascii:]]*" result)
+              (match-string 0 result)
+            (message "Unexpected result - source ok? <<%s>>" result)
+            nil)))
+    (error
+     (message "Error: %s %s" (car err) (cdr err)))))
+
+(defun ajrepl--start-of-top-level-char-p (char)
+  "Return non-nil if CHAR can start a top level container construct.
+
+Supported top level container constructs include:
+
+  * paren tuple            ()
+  * quoted constructs      '() ~()
+
+Note that constructs such as numbers, keywords, and symbols are excluded."
+  (member char '(?\( ?\~ ?\')))
+
+(defun ajrepl--column-zero-target-backward ()
+  "Move backward to the closest column zero target.
+
+Does not move point if there is no such construct.
+
+See `ajrepl--start-of-top-level-char-p' for which characters determine
+a column zero target."
+  (when (not (bobp))             ; do nothing if at beginning of buffer
+    (let ((pos (point)))
+      ;; only consider positions before the starting point
+      (if (bolp)
+          (forward-line -1)
+        (beginning-of-line))
+      (if (ajrepl--start-of-top-level-char-p (char-after (point)))
+          (setq pos (point))
+        (let ((done nil))
+          (while (not done)
+            (forward-line -1)
+            (cond ((ajrepl--start-of-top-level-char-p
+                    (char-after (point)))
+                   (setq pos (point))
+                   (setq done t))
+                  ((bobp)
+                   (setq done t))))))
+      (goto-char pos))))
+
 (defun ajrepl-send-expression-at-point ()
   "Send expression at point."
   (interactive)
-  (let* ((bounds (bounds-of-thing-at-point 'sexp))
-         (start (car bounds))
-         (end (cdr bounds)))
-    (when (and start end)
-      (ajrepl-send-region start end))))
+  (save-excursion
+    (let ((end (point)))
+      ;; XXX: if skipping backward over comments was easy, that might be
+      ;;      even nicer
+      ;;(skip-chars-backward " \t\n")
+      ;; XXX: cheap version
+      (save-excursion
+        (skip-chars-backward " \t\n")
+        (beginning-of-line)
+        (when (looking-at "[ \t]*#")
+          (setq end (point))))
+      (when-let ((beg (ajrepl--column-zero-target-backward)))
+        (when-let ((code (ajrepl--helper beg end)))
+          (ajrepl-send-code code))))))
+
+(defun ajrepl-switch-to-repl ()
+  "Switch to the repl buffer named by `ajrepl-repl-buffer-name`."
+  (interactive)
+  (pop-to-buffer ajrepl-repl-buffer-name))
 
 (defun ajrepl-repl-buffer-new-frame ()
-  "Create a new frame and switch the repl buffer in it."
+  "Create a new frame and switch to the repl buffer in it."
   (interactive)
   (select-frame-set-input-focus (make-frame-command))
   (switch-to-buffer (get-buffer ajrepl-repl-buffer-name)))
@@ -168,8 +239,7 @@
 (defun ajrepl-insert-last-output ()
   "Insert last evaluation result."
   (interactive)
-  (let ((here (point))
-        (original-buffer (current-buffer))
+  (let ((original-buffer (current-buffer))
         (repl-buffer (get-buffer ajrepl-repl-buffer-name))
         (last-output ""))
     (if (not repl-buffer)
@@ -178,9 +248,40 @@
       (set-buffer repl-buffer)
       (setq last-output
             (buffer-substring-no-properties comint-last-input-end
-                                            (first comint-last-prompt)))
+                                            (nth 0 comint-last-prompt)))
       (set-buffer original-buffer)
       (insert last-output))))
+
+;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;
+
+;; XXX: should the string argument be sanity-checked?
+;; (defun ajrepl-company-candidates (string)
+;;   "Get candidates for completion of STRING."
+;;   (when (ajrepl-get-process)
+;;     (when-let* ((code-str
+;;                  (format
+;;                   (concat "(filter "
+;;                           "  (fn [name] "
+;;                           "    (string/has-prefix? \"%s\" (string name)))"
+;;                           "  (keys root-env))")
+;;                   string))
+;;                 (candidates (ajrepl-send-code-async code-str)))
+;;       ;; XXX: consider expressing via rx
+;;       (when (string-match "@\\[\\(.*\\)\\]" candidates)
+;;         (when-let* ((beg (nth 2 (match-data)))
+;;                     (end (nth 3 (match-data)))
+;;                     (spaced (substring candidates beg end)))
+;;           (split-string spaced " "))))))
+
+;; (defun company-ajrepl (command &optional arg &rest ignored)
+;;   "Integration into company for ajrepl.
+;; COMMAND, ARG, IGNORED are part of the standard signature."
+;;   (interactive (list 'interactive))
+;;   (cl-case command
+;;     (prefix (company-grab-symbol)) ; XXX: change to tree-sitter-based later?
+;;     (candidates (ajrepl-company-candidates arg))))
+
+;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;
 
 (defvar ajrepl-interaction-mode-map
   (let ((map (make-sparse-keymap)))
