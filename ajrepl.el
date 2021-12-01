@@ -15,6 +15,8 @@
 
 ;;;;; Manual
 
+;;  Add the directory this file is in to your load-path.
+;;
 ;;  Put this in your relevant init file:
 ;;
 ;;    (require 'ajrepl)
