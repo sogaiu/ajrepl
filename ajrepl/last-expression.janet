@@ -1,7 +1,12 @@
 (import ./delims)
 
 (def expr-grammar
-  ~{:main (some :input)
+  ~{:main (cmt (sequence (capture (position))
+                         (some :input)
+                         (capture (position)))
+               ,|[:code
+                  ;(slice $& 2 -3)
+                  (first $&) ;(slice $& -3 -2)])
     #
     :input (choice :non-form
                    :form)
@@ -253,50 +258,31 @@
 
 (comment
 
-  (peg/match expr-grammar " ")
-  # => '@[(:whitespace " " 0 1)]
-
-  (peg/match expr-grammar "# hi there ")
-  # => '@[(:comment " hi there " 0 11)]
-
-  (peg/match expr-grammar "8")
-  # => '@[(:number "8" 0 1)]
-
-  (peg/match expr-grammar "true")
-  # => '@[(:constant "true" 0 4)]
-
   (peg/match expr-grammar `@"buffalo?"`)
-  # => '@[(:buffer "buffalo?" 0 11)]
-  
+  # => '@[(:code (:buffer "buffalo?" 0 11) 0 11)]
+
   (peg/match expr-grammar `"himo!"`)
-  # => '@[(:string "himo!" 0 7)]
+  # => '@[(:code (:string "himo!" 0 7) 0 7)]
 
   (peg/match expr-grammar "``himo!``")
-  # => '@[(:long-string "``himo!``" 0 9)]
-
-  (peg/match expr-grammar "@``snake?``")
-  # => '@[(:long-buffer "``snake?``" 0 11)]
+  # => '@[(:code (:long-string "``himo!``" 0 9) 0 9)]
 
   (peg/match expr-grammar ":smile")
-  # => '@[(:keyword ":smile" 0 6)]
-  
-  (peg/match expr-grammar "print")
-  # => '@[(:symbol "print" 0 5)]
+  # => '@[(:code (:keyword ":smile" 0 6) 0 6)]
 
   (peg/match expr-grammar "@()")
-  # => '@[(:array 0 3)]
-
-  (peg/match expr-grammar "()")
-  # => '@[(:tuple 0 2)]
+  # => '@[(:code (:array 0 3) 0 3)]
 
   (deep=
     #
     (peg/match expr-grammar "(+ 1 1)")
     #
-    '@[(:tuple
-         (:symbol "+" 1 2) (:whitespace " " 2 3)
-         (:number "1" 3 4) (:whitespace " " 4 5)
-         (:number "1" 5 6)
+    '@[(:code
+         (:tuple
+           (:symbol "+" 1 2) (:whitespace " " 2 3)
+           (:number "1" 3 4) (:whitespace " " 4 5)
+           (:number "1" 5 6)
+           0 7)
          0 7)])
   # => true
 
@@ -304,95 +290,22 @@
     #
     (peg/match expr-grammar "|(+ 1 $)")
     #
-    '@[(:fn
-         (:tuple
-           (:symbol "+" 2 3) (:whitespace " " 3 4)
-           (:number "1" 4 5) (:whitespace " " 5 6)
-           (:symbol "$" 6 7)
-           1 8)
+    '@[(:code
+         (:fn
+           (:tuple
+             (:symbol "+" 2 3) (:whitespace " " 3 4)
+             (:number "1" 4 5) (:whitespace " " 5 6)
+             (:symbol "$" 6 7)
+             1 8)
+           0 8)
          0 8)])
   # => true
 
-  (peg/match expr-grammar "~0")
-  # => '@[(:quasiquote (:number "0" 1 2) 0 2)]
-  
-  (peg/match expr-grammar "':hi")
-  # => '@[(:quote (:keyword ":hi" 1 4) 0 4)]
-
-  (deep=
-    #
-    (peg/match expr-grammar "[2 3]")
-    #
-    '@[(:bracket-tuple
-         (:number "2" 1 2) (:whitespace " " 2 3)
-         (:number "3" 3 4)
-         0 5)])
-  # => true
-
-  (deep=
-    #
-    (peg/match expr-grammar ";[8 9]")
-    #
-    '@[(:splice
-         (:bracket-tuple
-           (:number "8" 2 3) (:whitespace " " 3 4)
-           (:number "9" 4 5)
-           1 6)
-         0 6)])
-  # => true
-
-  (deep=
-    #
-    (peg/match expr-grammar "@[:x :z]")
-    #
-    '@[(:bracket-array
-         (:keyword ":x" 2 4) (:whitespace " " 4 5)
-         (:keyword ":z" 5 7)
-         0 8)])
-  # => true
-
-  (deep=
-    #
-    (peg/match expr-grammar "~,1")
-    #
-    '@[(:quasiquote
-         (:unquote
-           (:number "1" 2 3)
-           1 3)
-         0 3)])
-  # => true
-
-  (deep=
-    #
-    (peg/match expr-grammar "@{:a 1}")
-    #
-    '@[(:table
-         (:keyword ":a" 2 4) (:whitespace " " 4 5)
-         (:number "1" 5 6)
-         0 7)])
-  # => true
-
-  (deep=
-    #
-    (peg/match expr-grammar (string "{:alpha 1\n"
-                                    " :beta 2}"))
-    #
-    '@[(:struct
-         (:keyword ":alpha" 1 7) (:whitespace " " 7 8)
-         (:number "1" 8 9) (:whitespace "\n" 9 10)
-         (:whitespace " " 10 11)
-         (:keyword ":beta" 11 16) (:whitespace " " 16 17)
-         (:number "2" 17 18)
-         0 19)])
-  # => true
-  
   )
 
 (defn ast
   [code]
-  (->> code
-       (peg/match expr-grammar)
-       first))
+  (first (peg/match expr-grammar code)))
 
 (comment
 
@@ -400,11 +313,32 @@
     #
     (ast "(+ 1 1)")
     #
-    '(:tuple
-       (:symbol "+" 1 2) (:whitespace " " 2 3)
-       (:number "1" 3 4) (:whitespace " " 4 5)
-       (:number "1" 5 6)
+    '(:code
+       (:tuple
+         (:symbol "+" 1 2) (:whitespace " " 2 3)
+         (:number "1" 3 4) (:whitespace " " 4 5)
+         (:number "1" 5 6)
+         0 7)
        0 7))
+  # => true
+
+  (deep=
+    #
+    (ast "(+ 1 1) (- 2 1)")
+    #
+    '(:code
+       (:tuple
+         (:symbol "+" 1 2) (:whitespace " " 2 3)
+         (:number "1" 3 4) (:whitespace " " 4 5)
+         (:number "1" 5 6)
+         0 7)
+       (:whitespace " " 7 8)
+       (:tuple
+         (:symbol "-" 9 10) (:whitespace " " 10 11)
+         (:number "2" 11 12) (:whitespace " " 12 13)
+         (:number "1" 13 14)
+         8 15)
+       0 15))
   # => true
 
   )
@@ -474,7 +408,7 @@
   (def lines
     (string/split "\n" trimmed))
   # add any missing delimiters
-  (def delims
+  (def [delims _ _]
     (delims/missing-delims trimmed))
   (when (not (empty? delims))
     (array/push lines delims))
@@ -486,7 +420,11 @@
   (def result
     (find-expr tree target-pos))
   (when result
-    (string/slice trimmed (start result) (end result))))
+    (let [s (start result)
+          e (end result)]
+      # XXX: not addressing underlying cause?
+      (when (<= s e (length trimmed))
+        (string/slice trimmed (start result) (end result))))))
 
 (comment
 
@@ -510,23 +448,6 @@
   # => "(- 2 1)"
 
   (let [maybe-code
-        (string "~(defn hi\n"
-                "  [x]\n"
-                "  (+ 3 (* 8\n"
-                "          (- 2 1)")]
-    (last-expr maybe-code))
-  # => "(- 2 1)"
-
-  (let [maybe-code
-        (string "(defn hi\n"
-                "  [x]\n"
-                "  (+ 3 (* 8\n"
-                "          (- 2 1)\n"
-                "      ")]
-    (last-expr maybe-code))
-  # => "(- 2 1)"
-  
-  (let [maybe-code
         (string "'(defn hi\n"
                 "  [x]\n"
                 "  (+ 3 (* 8\n"
@@ -534,23 +455,6 @@
                 "      ")]
     (last-expr maybe-code))
   # => "(- 2 1)"
-
-  (let [maybe-code
-        (string "~(defn hi\n"
-                "  [x]\n"
-                "  (+ 3 (* 8\n"
-                "          (- 2 1)\n"
-                "      ")]
-    (last-expr maybe-code))
-  # => "(- 2 1)"
-
-  (let [maybe-code (string "a")]
-    (last-expr maybe-code))
-  # => "a"
-
-  (let [maybe-code (string "[:a :b]")]
-    (last-expr maybe-code))
-  # => "[:a :b]"
 
   (let [maybe-code (string "(defn missing-delims\n"
                            "  [fragment]\n"
@@ -562,6 +466,11 @@
   (let [maybe-code (string "(def a 1")]
     (last-expr maybe-code))
   # => "1"
+
+  # regression test
+  (let [code "(+ 1 1) (- 2 1)"]
+    (last-expr code))
+  # => "(- 2 1)"
 
   )
 
