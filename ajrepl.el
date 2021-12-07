@@ -133,18 +133,21 @@
   nil
   "If non-nil, output debug info to *Messages* buffer.")
 
+(defvar ajrepl--temp-buffers
+  '()
+  "List of buffers to clean up before executing `ajrepl--helper'.")
+
 (defun ajrepl--helper (start end)
   "Determine last paren expression by asking Janet.
 
 A region bounded by START and END is sent to a helper program."
   (interactive "r")
   (condition-case err
-      (let ((temp-buffer (generate-new-buffer
-                          (concat (if ajrepl--debug-output
-                                      ""
-                                    " ")
-                                  "*ajrepl-helper*")))
+      (let ((temp-buffer (generate-new-buffer "*ajrepl-helper*"))
             (result nil))
+        (dolist (old-buffer ajrepl--temp-buffers)
+          (kill-buffer old-buffer))
+        (add-to-list 'ajrepl--temp-buffers temp-buffer)
         (save-excursion
           (when ajrepl--debug-output
             (message "region: %S"
