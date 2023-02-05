@@ -137,6 +137,12 @@
   '()
   "List of buffers to clean up before executing `ajrepl--helper'.")
 
+(defvar ajrepl--run-under-gdb
+  nil
+  "If non-nil, start janet binary under the control of gdb.
+
+Requires the janet binary be built with debug symbols.")
+
 (defun ajrepl--helper (start end)
   "Determine last paren expression by asking Janet.
 
@@ -349,8 +355,14 @@ The following keys are available in `ajrepl-interaction-mode`:
         ;;(ignore-errors ;; XXX: uncomment at some point...
         (with-current-buffer (get-buffer-create ajrepl-repl-buffer-name)
           (prog1
-              (make-comint-in-buffer "ajrepl" ajrepl-repl-buffer-name
-                                     "janet" nil "-s")
+              (if ajrepl--run-under-gdb
+                  (make-comint-in-buffer "ajrepl" ajrepl-repl-buffer-name
+                                         "gdb" nil
+                                         "--quiet"
+                                         "--eval-command=run"
+                                         "--args" "janet" "-s")
+                (make-comint-in-buffer "ajrepl" ajrepl-repl-buffer-name
+                                       "janet" nil "-s"))
             (goto-char (point-max))
             (ajrepl-mode)
             (pop-to-buffer (current-buffer))
