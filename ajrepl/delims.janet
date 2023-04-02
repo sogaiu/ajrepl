@@ -55,56 +55,71 @@
 (comment
 
   (missing-delims "(defn a))")
-  # => nil
+  # =>
+  nil
 
   (missing-delims "(defn a")
-  # => [@")" [1 1] :tuple]
+  # =>
+  [@")" [1 1] :tuple]
 
   (missing-delims "{:a 1")
-  # => [@"}" [1 1] :struct]
+  # =>
+  [@"}" [1 1] :struct]
 
   (missing-delims "[:x :y")
-  # => [@"]" [1 1] :tuple]
+  # =>
+  [@"]" [1 1] :tuple]
 
   (missing-delims
     (string "{:a 1\n"
             " :b"))
-  # => [@"}" [1 1] :struct]
+  # =>
+  [@"}" [1 1] :struct]
 
   (missing-delims
     (string "(defn my-fn\n"
             "  [x]\n"
             "  (+ x 1"))
-  # => [@"))" [3 3] :tuple]
+  # =>
+  [@"))" [3 3] :tuple]
 
   (missing-delims `"nice string"`)
-  # => [@"" nil nil]
+  # =>
+  [@"" nil nil]
 
   (missing-delims `"not quite a string`)
-  # => [@`"` [1 1] :string]
+  # =>
+  [@`"` [1 1] :string]
 
   (missing-delims `("what is going on?)`)
-  # => [@`")` [1 2] :string]
+  # =>
+  [@`")` [1 2] :string]
 
   (missing-delims "``hello``")
-  # => [@"" nil nil]
+  # =>
+  [@"" nil nil]
 
   (missing-delims "``hello```")
-  # => [@"`" [1 10] :string]
+  # =>
+  [@"`" [1 10] :string]
 
   (missing-delims "@`hello")
-  # => [@"`" [1 2] :buffer]
+  # =>
+  [@"`" [1 2] :buffer]
 
   (missing-delims "1")
-  # => [@"" nil nil]
+  # =>
+  [@"" nil nil]
 
   (missing-delims "")
-  # => [@"" nil nil]
+  # =>
+  [@"" nil nil]
 
   (missing-delims
     (string "``\n"
             "  hello"))
-  # => [@"``" [1 1] :string]
+  # =>
+  [@"``" [1 1] :string]
 
   )
 
@@ -117,22 +132,28 @@
 (comment
 
   (close-delims "(")
-  # => "()"
+  # =>
+  "()"
 
   (close-delims "'(")
-  # => "'()"
+  # =>
+  "'()"
 
   (close-delims "~(smile breathe")
-  # => "~(smile breathe)"
+  # =>
+  "~(smile breathe)"
 
   (close-delims "{:a 1\n:b 2")
-  # => "{:a 1\n:b 2}"
+  # =>
+  "{:a 1\n:b 2}"
 
   (close-delims "[1 2 3 5 8")
-  # => "[1 2 3 5 8]"
+  # =>
+  "[1 2 3 5 8]"
 
   (close-delims "{:a 1 :b [:x :y")
-  # => "{:a 1 :b [:x :y]}"
+  # =>
+  "{:a 1 :b [:x :y]}"
 
   (let [maybe-code
         (string "(defn hi\n"
@@ -144,6 +165,7 @@
       (close-delims maybe-code)
       #
       (string maybe-code ")))")))
-  # => true
+  # =>
+  true
 
   )

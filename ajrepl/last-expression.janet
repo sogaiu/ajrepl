@@ -259,19 +259,24 @@
 (comment
 
   (peg/match expr-grammar `@"buffalo?"`)
-  # => '@[(:code (:buffer "buffalo?" 0 11) 0 11)]
+  # =>
+  '@[(:code (:buffer "buffalo?" 0 11) 0 11)]
 
   (peg/match expr-grammar `"himo!"`)
-  # => '@[(:code (:string "himo!" 0 7) 0 7)]
+  # =>
+  '@[(:code (:string "himo!" 0 7) 0 7)]
 
   (peg/match expr-grammar "``himo!``")
-  # => '@[(:code (:long-string "``himo!``" 0 9) 0 9)]
+  # =>
+  '@[(:code (:long-string "``himo!``" 0 9) 0 9)]
 
   (peg/match expr-grammar ":smile")
-  # => '@[(:code (:keyword ":smile" 0 6) 0 6)]
+  # =>
+  '@[(:code (:keyword ":smile" 0 6) 0 6)]
 
   (peg/match expr-grammar "@()")
-  # => '@[(:code (:array 0 3) 0 3)]
+  # =>
+  '@[(:code (:array 0 3) 0 3)]
 
   (deep=
     #
@@ -284,7 +289,8 @@
            (:number "1" 5 6)
            0 7)
          0 7)])
-  # => true
+  # =>
+  true
 
   (deep=
     #
@@ -299,7 +305,8 @@
              1 8)
            0 8)
          0 8)])
-  # => true
+  # =>
+  true
 
   )
 
@@ -320,7 +327,8 @@
          (:number "1" 5 6)
          0 7)
        0 7))
-  # => true
+  # =>
+  true
 
   (deep=
     #
@@ -339,7 +347,8 @@
          (:number "1" 13 14)
          8 15)
        0 15))
-  # => true
+  # =>
+  true
 
   )
 
@@ -354,7 +363,8 @@
 (comment
 
   (start (ast "(+ 1 1)"))
-  # => 0
+  # =>
+  0
 
   )
 
@@ -365,7 +375,8 @@
 (comment
 
   (end (ast "(+ 1 1)"))
-  # => 7
+  # =>
+  7
 
   )
 
@@ -429,7 +440,8 @@
 (comment
 
   (last-expr "1")
-  # => "1"
+  # =>
+  "1"
 
   (let [maybe-code
         (string "(defn hi\n"
@@ -437,7 +449,8 @@
                 "  (+ 3 (* 8\n"
                 "          (- 2 1)")]
     (last-expr maybe-code))
-  # => "(- 2 1)"
+  # =>
+  "(- 2 1)"
 
   (let [maybe-code
         (string "'(defn hi\n"
@@ -445,7 +458,8 @@
                 "  (+ 3 (* 8\n"
                 "          (- 2 1)")]
     (last-expr maybe-code))
-  # => "(- 2 1)"
+  # =>
+  "(- 2 1)"
 
   (let [maybe-code
         (string "'(defn hi\n"
@@ -454,23 +468,27 @@
                 "          (- 2 1)\n"
                 "      ")]
     (last-expr maybe-code))
-  # => "(- 2 1)"
+  # =>
+  "(- 2 1)"
 
   (let [maybe-code (string "(defn missing-delims\n"
                            "  [fragment]\n"
                            "  (var missing @\"\")\n"
                            "  (def p (parser/new))")]
     (last-expr maybe-code))
-  # => "(def p (parser/new))"
+  # =>
+  "(def p (parser/new))"
 
   (let [maybe-code (string "(def a 1")]
     (last-expr maybe-code))
-  # => "1"
+  # =>
+  "1"
 
   # regression test
   (let [code "(+ 1 1) (- 2 1)"]
     (last-expr code))
-  # => "(- 2 1)"
+  # =>
+  "(- 2 1)"
 
   )
 
