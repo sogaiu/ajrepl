@@ -182,7 +182,7 @@ A region bounded by START and END is sent to a helper program."
 Supported top level container constructs include:
 
   * paren tuple            ()
-  * quoted constructs      '() ~()
+  * quoted constructs      \\='() ~()
 
 Note that constructs such as numbers, keywords, and symbols are excluded."
   (member char '(?\( ?\~ ?\')))
