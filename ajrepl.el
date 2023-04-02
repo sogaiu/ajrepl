@@ -343,8 +343,9 @@ a column zero target."
 The following keys are available in `ajrepl-interaction-mode`:
 
 \\{ajrepl-interaction-mode}"
-
-  nil " ajrepl" ajrepl-interaction-mode-map)
+  :init-value nil
+  :lighter " ajrepl"
+  :keymap ajrepl-interaction-mode-map)
 
 ;;;###autoload
 (defun ajrepl ()
