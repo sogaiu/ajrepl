@@ -250,18 +250,29 @@ a column zero target."
 (defun ajrepl-insert-last-output ()
   "Insert last evaluation result."
   (interactive)
-  (let ((original-buffer (current-buffer))
-        (repl-buffer (get-buffer ajrepl-repl-buffer-name))
-        (last-output ""))
-    (if (not repl-buffer)
-        (message (format "%s is missing..." ajrepl-repl-buffer-name))
-      ;; switch to ajrepl buffer to prepare for appending
-      (set-buffer repl-buffer)
-      (setq last-output
-            (buffer-substring-no-properties comint-last-input-end
-                                            (nth 0 comint-last-prompt)))
-      (set-buffer original-buffer)
-      (insert last-output))))
+  ;; XXX: temporary measure to avoid problems?
+  (if (eq last-command 'ajrepl-send-buffer)
+      (message "Sorry, this doesn't work right after ajrepl-send-buffer.")
+    (let ((original-buffer (current-buffer))
+          (repl-buffer (get-buffer ajrepl-repl-buffer-name))
+          (last-output ""))
+      (if (not repl-buffer)
+          (message (format "%s is missing..." ajrepl-repl-buffer-name))
+        ;; switch to ajrepl buffer to prepare for appending
+        (set-buffer repl-buffer)
+        (if (not comint-last-output-start)
+            (message "Sorry, couldn't tell where the last output started.")
+          (if (not comint-last-prompt)
+              (message "Sorry, couldn't tell where last prompt is.")
+            ;; XXX: hack to skip zero or more instances of "repl:[^>]+> "
+            (goto-char comint-last-output-start)
+            (while (looking-at "repl:[^>]+> ")
+              (re-search-forward "repl:[^>]+> "))
+            (setq last-output
+                  (buffer-substring-no-properties (point)
+                                                  (nth 0 comint-last-prompt)))
+            (set-buffer original-buffer)
+            (insert last-output)))))))
 
 ;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;
 
