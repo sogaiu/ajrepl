@@ -275,37 +275,6 @@ a column zero target."
             (set-buffer original-buffer)
             (insert last-output)))))))
 
-;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;
-
-;; XXX: should the string argument be sanity-checked?
-;; (defun ajrepl-company-candidates (string)
-;;   "Get candidates for completion of STRING."
-;;   (when (ajrepl-get-process)
-;;     (when-let* ((code-str
-;;                  (format
-;;                   (concat "(filter "
-;;                           "  (fn [name] "
-;;                           "    (string/has-prefix? \"%s\" (string name)))"
-;;                           "  (keys root-env))")
-;;                   string))
-;;                 (candidates (ajrepl-send-code-async code-str)))
-;;       ;; XXX: consider expressing via rx
-;;       (when (string-match "@\\[\\(.*\\)\\]" candidates)
-;;         (when-let* ((beg (nth 2 (match-data)))
-;;                     (end (nth 3 (match-data)))
-;;                     (spaced (substring candidates beg end)))
-;;           (split-string spaced " "))))))
-
-;; (defun company-ajrepl (command &optional arg &rest ignored)
-;;   "Integration into company for ajrepl.
-;; COMMAND, ARG, IGNORED are part of the standard signature."
-;;   (interactive (list 'interactive))
-;;   (cl-case command
-;;     (prefix (company-grab-symbol)) ; XXX: change to tree-sitter-based later?
-;;     (candidates (ajrepl-company-candidates arg))))
-
-;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;
-
 (defvar ajrepl-interaction-mode-map
   (let ((map (make-sparse-keymap)))
     (define-key map "\C-c\C-b" 'ajrepl-send-buffer)
