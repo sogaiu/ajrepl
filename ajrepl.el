@@ -247,6 +247,7 @@ a column zero target."
   (interactive)
   (ajrepl-send-code "(setdyn :pretty-format \"%.20M\")"))
 
+;; XXX: consider removing trailing end-of-line characters...
 (defun ajrepl-insert-last-output ()
   "Insert last evaluation result."
   (interactive)
@@ -264,10 +265,10 @@ a column zero target."
             (message "Sorry, couldn't tell where the last output started.")
           (if (not comint-last-prompt)
               (message "Sorry, couldn't tell where last prompt is.")
-            ;; XXX: hack to skip zero or more instances of "repl:[^>]+> "
+            ;; XXX: hack to skip zero or more instances of arepl-prompt
             (goto-char comint-last-output-start)
-            (while (looking-at "repl:[^>]+> ")
-              (re-search-forward "repl:[^>]+> "))
+            (while (looking-at ajrepl-prompt)
+              (re-search-forward ajrepl-prompt))
             (setq last-output
                   (buffer-substring-no-properties (point)
                                                   (nth 0 comint-last-prompt)))
