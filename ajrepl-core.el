@@ -37,6 +37,36 @@
   "Return Janet process for repl buffer."
   (get-buffer-process ajrepl-repl-buffer-name))
 
+;; XXX: trailing newlines in combination with telling comint not to
+;; send a newline appended to the input can lead to comint-simple-send
+;; sending eof (it appears that rms committed that code in 2002, so at
+;; this point, no one may know why it's there).  this can result in
+;; unexpected ending of one's repl session. to avoid such issues, if
+;; there is a trailing newline for one's input, trim it and rely on
+;; comint to append a newline
+(defun ajrepl-trim-trailing-newline-maybe (a-str)
+  "If A-STR has a trailing newline, trim it."
+  (if (and (not (string-empty-p a-str))
+           (string-equal "\n" (substring a-str -1)))
+      (substring a-str 0 -1)
+    a-str))
+
+(ignore
+
+ (ajrepl-trim-trailing-newline-maybe "hello\n")
+ ;; =>
+ "hello"
+
+ (ajrepl-trim-trailing-newline-maybe "")
+ ;; =>
+ ""
+
+ (ajrepl-trim-trailing-newline-maybe "hello")
+ ;; =>
+ "hello"
+
+ )
+
 (defun ajrepl-send-code (code-str)
   "Send CODE-STR to Janet repl."
   (interactive "sCode: ")
@@ -48,6 +78,8 @@
       ;; switch to ajrepl buffer to prepare for appending
       (set-buffer repl-buffer)
       (goto-char (point-max))
+      (setq code-str
+            (ajrepl-trim-trailing-newline-maybe code-str))
       (insert code-str)
       (comint-send-input)
       (set-buffer original-buffer)

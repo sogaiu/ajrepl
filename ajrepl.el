@@ -109,11 +109,13 @@
       (goto-char (point-max))
       ;; switch back
       (set-buffer original-buffer)
-      (append-to-buffer repl-buffer start end)
-      (set-buffer repl-buffer)
-      (comint-send-input)
-      (set-buffer original-buffer)
-      (goto-char here))))
+      (let ((code-str (ajrepl-trim-trailing-newline-maybe
+                       (buffer-substring-no-properties start end))))
+        (set-buffer repl-buffer)
+        (insert code-str)
+        (comint-send-input)
+        (set-buffer original-buffer)
+        (goto-char here)))))
 
 (defun ajrepl-send-buffer ()
   "Send buffer content."
