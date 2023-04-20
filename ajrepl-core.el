@@ -23,7 +23,7 @@
 ;;;; The Rest
 
 (defgroup ajrepl nil
-  "A Janet REPL"
+  "Code for interacting with Janet via a REPL."
   :prefix "ajrepl-"
   :group 'applications)
 

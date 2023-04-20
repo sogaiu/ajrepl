@@ -350,7 +350,7 @@ a column zero target."
 
 ;;;###autoload
 (define-minor-mode ajrepl-interaction-mode
-  "Minor mode for ajrepl interaction from a lisp buffer.
+  "Minor mode for ajrepl interaction from a buffer with Janet code.
 
 The following keys are available in `ajrepl-interaction-mode`:
 
