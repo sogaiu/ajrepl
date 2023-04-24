@@ -249,6 +249,13 @@ a column zero target."
   (interactive)
   (ajrepl-send-code "(setdyn :pretty-format \"%.20M\")"))
 
+;; XXX: assumes that output from process does not contain strings that match
+;;      repl prompt
+;;
+;; XXX: in some cases comint-last-output-start was reporting incorrect
+;;      values.  the current approach (relying on searching for ajrepl-prompt)
+;;      tries to work around that.
+;;
 ;; XXX: consider removing trailing end-of-line characters...
 (defun ajrepl-insert-last-output ()
   "Insert last evaluation result."
@@ -263,19 +270,27 @@ a column zero target."
           (message (format "%s is missing..." ajrepl-repl-buffer-name))
         ;; switch to ajrepl buffer to prepare for appending
         (set-buffer repl-buffer)
-        (if (not comint-last-output-start)
-            (message "Sorry, couldn't tell where the last output started.")
-          (if (not comint-last-prompt)
-              (message "Sorry, couldn't tell where last prompt is.")
-            ;; XXX: hack to skip zero or more instances of arepl-prompt
-            (goto-char comint-last-output-start)
-            (while (looking-at ajrepl-prompt)
-              (re-search-forward ajrepl-prompt))
-            (setq last-output
-                  (buffer-substring-no-properties (point)
-                                                  (nth 0 comint-last-prompt)))
-            (set-buffer original-buffer)
-            (insert last-output)))))))
+        (save-excursion
+          (let ((start nil)
+                (multiline nil))
+            (goto-char (point-max))
+            (when (and (re-search-backward ajrepl-prompt)
+                       (re-search-backward ajrepl-prompt))
+              (setq multiline
+                    (not (looking-at "repl:[0-9]+:>" :inhibit-modify)))
+              (when (re-search-forward ajrepl-prompt)
+                (when (not multiline)
+                  ;; XXX: might not work for all cases...keep an eye out
+                  (forward-sexp))
+                (setq start (point))
+                (when (and (re-search-forward ajrepl-prompt)
+                           (re-search-backward ajrepl-prompt))
+                  (setq last-output
+                        (buffer-substring-no-properties start (point))))))))
+        (set-buffer original-buffer)
+        (if last-output
+          (insert last-output)
+          (message "Did not identify last output"))))))
 
 (defvar ajrepl-interaction-mode-map
   (let ((map (make-sparse-keymap)))
