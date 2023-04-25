@@ -255,8 +255,6 @@ a column zero target."
 ;; XXX: in some cases comint-last-output-start was reporting incorrect
 ;;      values.  the current approach (relying on searching for ajrepl-prompt)
 ;;      tries to work around that.
-;;
-;; XXX: consider removing trailing end-of-line characters...
 (defun ajrepl-insert-last-output ()
   "Insert last evaluation result."
   (interactive)
@@ -286,11 +284,12 @@ a column zero target."
                 (when (and (re-search-forward ajrepl-prompt)
                            (re-search-backward ajrepl-prompt))
                   (setq last-output
-                        (buffer-substring-no-properties start (point))))))))
+                        (string-trim
+                         (buffer-substring-no-properties start (point)))))))))
         (set-buffer original-buffer)
-        (if last-output
-          (insert last-output)
-          (message "Did not identify last output"))))))
+        (if (not last-output)
+            (message "Did not identify last output")
+          (insert last-output))))))
 
 (defvar ajrepl-interaction-mode-map
   (let ((map (make-sparse-keymap)))
