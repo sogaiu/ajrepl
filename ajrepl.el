@@ -233,6 +233,26 @@ a column zero target."
         (when-let ((code (ajrepl--helper beg end)))
           (ajrepl-send-code code))))))
 
+(defun ajrepl-send-expression-upscoped ()
+  "Send expression at point wrapped in (upscope ... 1).
+
+This is to avoid copious output from evaluating certain forms."
+  (interactive)
+  (save-excursion
+    (let ((end (point)))
+      ;; XXX: if skipping backward over comments was easy, that might be
+      ;;      even nicer
+      ;;(skip-chars-backward " \t\n")
+      ;; XXX: cheap version
+      (save-excursion
+        (skip-chars-backward " \t\n")
+        (beginning-of-line)
+        (when (looking-at "[ \t]*#")
+          (setq end (point))))
+      (when-let ((beg (ajrepl--column-zero-target-backward)))
+        (when-let ((code (ajrepl--helper beg end)))
+          (ajrepl-send-code (format "(upscope\n%s\n:done)" code)))))))
+
 (defun ajrepl-switch-to-repl ()
   "Switch to the repl buffer named by `ajrepl-repl-buffer-name`."
   (interactive)
@@ -295,6 +315,7 @@ a column zero target."
   (let ((map (make-sparse-keymap)))
     (define-key map "\C-c\C-b" 'ajrepl-send-buffer)
     (define-key map "\C-x\C-e" 'ajrepl-send-expression-at-point)
+    (define-key map "\C-x\C-u" 'ajrepl-send-expression-upscoped)
     (define-key map "\C-c\C-r" 'ajrepl-send-region)
     (define-key map "\C-c\C-i" 'ajrepl-insert-last-output)
     (define-key map "\C-c\C-n" 'ajrepl-repl-buffer-new-frame)
@@ -304,6 +325,7 @@ a column zero target."
       '("Ajrepl"
         ["Send buffer" ajrepl-send-buffer t]
         ["Send expression at point" ajrepl-send-expression-at-point t]
+        ["Send expression upscoped" ajrepl-send-expression-upscoped t]
         ["Send region" ajrepl-send-region t]
         "--"
         ["Insert last output" ajrepl-insert-last-output t]
