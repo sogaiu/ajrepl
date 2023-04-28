@@ -331,6 +331,7 @@ a column zero target."
 
   :syntax-table lisp-mode-syntax-table
   (setq comint-prompt-read-only t)
+  (setq comint-scroll-to-bottom-on-output t)
   (setq mode-line-process '(":%s")))
 
 ;;;###autoload
