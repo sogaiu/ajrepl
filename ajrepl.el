@@ -311,6 +311,18 @@ This is to avoid copious output from evaluating certain forms."
             (message "Did not identify last output")
           (insert last-output))))))
 
+;; XXX: hacky because of the waiting
+(defun ajrepl-insert-rest-of-usage ()
+  "Insert rest of usage."
+  (interactive)
+  (newline-and-indent)
+  (insert "# =>")
+  (newline-and-indent)
+  (ajrepl-send-expression-at-point)
+  ;; XXX
+  (sit-for 0.1)
+  (ajrepl-insert-last-output))
+
 (defvar ajrepl-interaction-mode-map
   (let ((map (make-sparse-keymap)))
     (define-key map "\C-c\C-b" 'ajrepl-send-buffer)
@@ -318,6 +330,7 @@ This is to avoid copious output from evaluating certain forms."
     (define-key map "\C-x\C-u" 'ajrepl-send-expression-upscoped)
     (define-key map "\C-c\C-r" 'ajrepl-send-region)
     (define-key map "\C-c\C-i" 'ajrepl-insert-last-output)
+    (define-key map "\C-c\C-c" 'ajrepl-insert-rest-of-usage)
     (define-key map "\C-c\C-n" 'ajrepl-repl-buffer-new-frame)
     (define-key map "\C-c\C-z" 'ajrepl-switch-to-repl)
     (easy-menu-define ajrepl-interaction-mode-map map
