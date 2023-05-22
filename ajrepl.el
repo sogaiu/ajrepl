@@ -234,7 +234,7 @@ a column zero target."
           (ajrepl-send-code code))))))
 
 (defun ajrepl-send-expression-upscoped ()
-  "Send expression at point wrapped in (upscope ... 1).
+  "Send expression at point wrapped in (upscope ... :done).
 
 This is to avoid copious output from evaluating certain forms."
   (interactive)
