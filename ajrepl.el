@@ -384,10 +384,14 @@ The following keys are available in `ajrepl-interaction-mode`:
 (defun ajrepl ()
   "Start ajrepl."
   (interactive)
-  (let ((start-buffer (current-buffer)))
+  (let ((start-buffer (current-buffer))
+        ;; XXX: work-around
+        (better-dir default-directory))
     (unless
         ;;(ignore-errors ;; XXX: uncomment at some point...
         (with-current-buffer (get-buffer-create ajrepl-repl-buffer-name)
+          ;; XXX: work-around
+          (setq default-directory better-dir)
           (prog1
               (if ajrepl--run-under-gdb
                   (make-comint-in-buffer "ajrepl" ajrepl-repl-buffer-name
