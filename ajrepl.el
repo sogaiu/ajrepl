@@ -327,7 +327,7 @@ This is to avoid copious output from evaluating certain forms."
   (let ((map (make-sparse-keymap)))
     (define-key map "\C-c\C-b" 'ajrepl-send-buffer)
     (define-key map "\C-x\C-e" 'ajrepl-send-expression-at-point)
-    (define-key map "\C-x\C-u" 'ajrepl-send-expression-upscoped)
+    (define-key map "\C-c\C-u" 'ajrepl-send-expression-upscoped)
     (define-key map "\C-c\C-r" 'ajrepl-send-region)
     (define-key map "\C-c\C-i" 'ajrepl-insert-last-output)
     (define-key map "\C-c\C-c" 'ajrepl-insert-rest-of-usage)
