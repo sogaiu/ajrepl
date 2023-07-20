@@ -126,9 +126,13 @@
 (defvar ajrepl--helper-path
   (expand-file-name
    (concat (expand-file-name
-	    (file-name-directory (or load-file-name
-				     buffer-file-name)))
-	   "ajrepl/last-expression.janet"))
+            (file-name-directory (or load-file-name
+                                     buffer-file-name)))
+           "ajrepl/"
+           "vendor/"
+           "janet-last-expression/"
+           "janet-last-expression/"
+           "last-expression.janet"))
   "Path to helper program to determine last paren expression.")
 
 (defvar ajrepl--debug-output
