@@ -266,7 +266,8 @@ This is to avoid copious output from evaluating certain forms."
   "Create a new frame and switch to the repl buffer in it."
   (interactive)
   (select-frame-set-input-focus (make-frame-command))
-  (switch-to-buffer (get-buffer ajrepl-repl-buffer-name)))
+  (pop-to-buffer (get-buffer ajrepl-repl-buffer-name))
+  (delete-other-windows))
 
 (defun ajrepl-set-pretty-format ()
   "Set :pretty-format to multiline."
