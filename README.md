@@ -8,7 +8,10 @@ How to set things up varies a bit depending on how one manages one's
 Emacs, e.g. straight.el, Doom, etc.  What's common to all situations
 is likely:
 
-* Ensure a janet-mode is installed and configured.
+* Ensure `janet-ts-mode` or `janet-mode` is installed and configured.
+  (If using `janet-mode`, replace `janet-ts-mode` and
+  `janet-ts-mode-hook` below with `janet-mode` and `janet-mode-hook`
+  respectively.)
 
 * Clone this repository.
 
@@ -24,7 +27,7 @@ is likely:
     (use-package ajrepl
       :straight t
       :config
-      (add-hook 'janet-mode-hook
+      (add-hook 'janet-ts-mode-hook
                 #'ajrepl-interaction-mode))
     ```
 
@@ -40,9 +43,9 @@ is likely:
                                   "ajrepl/*"))))
 
     (use-package! ajrepl
-      :after janet-mode
+      :after janet-ts-mode
       :config
-      (add-hook 'janet-mode-hook
+      (add-hook 'janet-ts-mode-hook
                 #'ajrepl-interaction-mode))
     ```
 
@@ -56,7 +59,7 @@ is likely:
 
     (require 'ajrepl)
 
-    (add-hook 'janet-mode-hook
+    (add-hook 'janet-ts-mode-hook
               #'ajrepl-interaction-mode)
     ```
 
