@@ -82,6 +82,9 @@ is likely:
     * Send expression at point (`C-x C-e`)
     * Send region (`C-c C-r`)
 
+    If Emacs' menus are enabled, there should be a `Ajrepl` menu
+    which shows the above (and other) commands.
+
 ## Issues
 
 * The REPL buffer gets very messy due to prompt information from Janet.
