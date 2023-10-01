@@ -8,10 +8,10 @@ How to set things up varies a bit depending on how one manages one's
 Emacs, e.g. straight.el, Doom, etc.  What's common to all situations
 is likely:
 
-* Ensure `janet-ts-mode` or `janet-mode` is installed and configured.
-  (If using `janet-mode`, replace `janet-ts-mode` and
-  `janet-ts-mode-hook` below with `janet-mode` and `janet-mode-hook`
-  respectively.)
+* Ensure [janet-ts-mode](https://github.com/sogaiu/janet-ts-mode) or
+  `janet-mode` is installed and configured.  (If using `janet-mode`,
+  replace `janet-ts-mode` and `janet-ts-mode-hook` below with
+  `janet-mode` and `janet-mode-hook` respectively.)
 
 * Clone this repository.
 
