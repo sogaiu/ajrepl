@@ -141,7 +141,7 @@
          ,|[:buffer $1 $0 $2])
     #
     :escape (sequence "\\"
-                      (choice (set "0efnrtvz\"\\")
+                      (choice (set `"'0?\abefnrtvz`)
                               (sequence "x" [2 :hex])
                               (sequence "u" [4 :hex])
                               (sequence "U" [6 :hex])
@@ -433,58 +433,81 @@
   # =>
   "1"
 
-  (let [maybe-code
-        (string "(defn hi\n"
-                "  [x]\n"
-                "  (+ 3 (* 8\n"
-                "          (- 2 1)")]
-    (last-expr maybe-code))
-  # =>
-  "(- 2 1)"
-
-  (let [maybe-code
-        (string "'(defn hi\n"
-                "  [x]\n"
-                "  (+ 3 (* 8\n"
-                "          (- 2 1)")]
-    (last-expr maybe-code))
-  # =>
-  "(- 2 1)"
-
-  (let [maybe-code
-        (string "'(defn hi\n"
-                "  [x]\n"
-                "  (+ 3 (* 8\n"
-                "          (- 2 1)\n"
-                "      ")]
-    (last-expr maybe-code))
-  # =>
-  "(- 2 1)"
-
-  (let [maybe-code (string "(defn missing-delims\n"
-                           "  [fragment]\n"
-                           "  (var missing @\"\")\n"
-                           "  (def p (parser/new))")]
-    (last-expr maybe-code))
-  # =>
-  "(def p (parser/new))"
-
-  (let [maybe-code (string "(def a 1")]
-    (last-expr maybe-code))
+  (last-expr "(def a 1")
   # =>
   "1"
 
+  (last-expr "(def a 1)")
+  # =>
+  "(def a 1)"
+
+  (last-expr "# a comment")
+  # =>
+  nil
+
+  (last-expr "     ")
+  # =>
+  nil
+
+  (last-expr ``
+             (defn hi
+               [x]
+               (+ 3 (* 8
+                       (- 2 1)
+             ``)
+  # =>
+  "(- 2 1)"
+
+  (last-expr ``
+             '(defn hi
+               [x]
+               (+ 3 (* 8
+               (- 2 1)
+              ``)
+  # =>
+  "(- 2 1)"
+
+  (last-expr (string "'(defn hi\n"
+                     "  [x]\n"
+                     "  (+ 3 (* 8\n"
+                     "          (- 2 1)\n"
+                     "      "))
+  # =>
+  "(- 2 1)"
+
+  (last-expr ``
+             (defn missing-delims
+               [fragment]
+               (var missing @"")
+               (def p (parser/new))
+             ``)
+  # =>
+  "(def p (parser/new))"
+
+  (last-expr ``
+             # a comment
+             :hello
+             ``)
+  # =>
+  ":hello"
+
   # regression test
-  (let [code "(+ 1 1) (- 2 1)"]
-    (last-expr code))
+  (last-expr "(+ 1 1) (- 2 1)")
   # =>
   "(- 2 1)"
 
   # regression test
-  (let [code "'(+ 1 1)"]
-    (last-expr code))
+  (last-expr "'(+ 1 1)")
   # =>
   "'(+ 1 1)"
+
+  # XXX: perhaps prefer result to be :hello?
+  (last-expr ``
+             :hello
+             # a comment
+             ``)
+  # =>
+  nil
 
   )
 
