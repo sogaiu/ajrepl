@@ -80,10 +80,25 @@ is likely:
 
     * Send buffer (`C-c C-b`)
     * Send expression at point (`C-x C-e`)
+    * Send expression upscoped (`C-c C-u`) - see below for details
     * Send region (`C-c C-r`)
 
     If Emacs' menus are enabled, there should be a `Ajrepl` menu
     which shows the above (and other) commands.
+
+## Misc Notes
+
+`ajrepl-send-expression-upscoped` can be handy when evaluating forms
+such as `(import ...)` which might otherwise lead to output one might
+not be interested in.
+
+## Experimental Commands
+
+There's also a file named `ajrepl-experiment.el` that contains some
+experimental (aka "may not stick around") functionality.
+
+If the file is required, it should add some additional things to the
+`Ajrepl` menu.
 
 ## Issues
 

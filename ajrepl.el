@@ -262,18 +262,6 @@ This is to avoid copious output from evaluating certain forms."
   (interactive)
   (pop-to-buffer ajrepl-repl-buffer-name))
 
-(defun ajrepl-repl-buffer-new-frame ()
-  "Create a new frame and switch to the repl buffer in it."
-  (interactive)
-  (select-frame-set-input-focus (make-frame-command))
-  (pop-to-buffer (get-buffer ajrepl-repl-buffer-name))
-  (delete-other-windows))
-
-(defun ajrepl-set-pretty-format ()
-  "Set :pretty-format to multiline."
-  (interactive)
-  (ajrepl-send-code "(setdyn :pretty-format \"%.20M\")"))
-
 ;; XXX: assumes that output from process does not contain strings that match
 ;;      repl prompt
 ;;
@@ -328,25 +316,6 @@ This is to avoid copious output from evaluating certain forms."
   (sit-for 0.1)
   (ajrepl-insert-last-output))
 
-;; XXX: get content from file eventually?
-(defun ajrepl-redefine-comment-macro ()
-  "Redefine comment macro."
-  (interactive)
-  (ajrepl-send-code
-   (concat "(defmacro comment\n"
-           "  [& args]\n"
-           "  (when-let [head (first args)\n"
-           "             _ (symbol? head)]\n"
-           "    (tuple head ;(drop 1 args))))")))
-
-(defun ajrepl-reset-comment-macro ()
-  "Reset comment macro."
-  (interactive)
-  (ajrepl-send-code
-   (concat "(defmacro comment\n"
-           "  \"Ignores the body of the comment.\"\n"
-           "  [&])")))
-
 (defvar ajrepl-interaction-mode-map
   (let ((map (make-sparse-keymap)))
     (define-key map "\C-c\C-b" 'ajrepl-send-buffer)
@@ -368,12 +337,7 @@ This is to avoid copious output from evaluating certain forms."
         ["Insert last output" ajrepl-insert-last-output t]
         "--"
         ["Start REPL" ajrepl t]
-        ["Multiline Formatting" ajrepl-set-pretty-format t]
-        ["New Frame with REPL" ajrepl-repl-buffer-new-frame t]
-        ["Switch to REPL" ajrepl-switch-to-repl t]
-        "--"
-        ["Redefine comment macro" ajrepl-redefine-comment-macro t]
-        ["Reset comment macro" ajrepl-reset-comment-macro t]))
+        ["Switch to REPL" ajrepl-switch-to-repl t]))
     map)
   "Ajrepl interaction mode map.")
 
