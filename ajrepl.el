@@ -324,7 +324,6 @@ This is to avoid copious output from evaluating certain forms."
     (define-key map "\C-c\C-r" 'ajrepl-send-region)
     (define-key map "\C-c\C-i" 'ajrepl-insert-last-output)
     (define-key map "\C-c\C-c" 'ajrepl-insert-rest-of-usage)
-    (define-key map "\C-c\C-n" 'ajrepl-repl-buffer-new-frame)
     (define-key map "\C-c\C-z" 'ajrepl-switch-to-repl)
     (easy-menu-define ajrepl-interaction-mode-map map
       "A Janet REPL Interaction Mode Menu"
