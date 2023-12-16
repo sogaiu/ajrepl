@@ -334,6 +334,7 @@ This is to avoid copious output from evaluating certain forms."
         ["Send region" ajrepl-send-region t]
         "--"
         ["Insert last output" ajrepl-insert-last-output t]
+        ["Insert rest of usage" ajrepl-insert-rest-of-usage t]
         "--"
         ["Start REPL" ajrepl t]
         ["Switch to REPL" ajrepl-switch-to-repl t]))
