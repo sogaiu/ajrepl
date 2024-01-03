@@ -18,7 +18,7 @@ is likely:
 ### straight.el
 
 * I add the following sort of thing to my `.emacs`-equivalent:
-    ```
+    ```elisp
     (straight-use-package
       '(ajrepl :host github
                :repo "sogaiu/ajrepl"
@@ -34,7 +34,7 @@ is likely:
 ### Doom
 
 * The following might work for Doom:
-    ```
+    ```elisp
     (package! ajrepl
       :recipe (:type git
                :host github
@@ -53,7 +53,7 @@ is likely:
 
 * If you cloned to `~/src/ajrepl`, add the following to your
   `.emacs`-equivalent:
-    ```
+    ```elisp
     (add-to-list 'load-path
                  (expand-file-name "~/src/ajrepl"))
 
