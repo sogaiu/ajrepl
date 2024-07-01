@@ -129,7 +129,6 @@
             (file-name-directory (or load-file-name
                                      buffer-file-name)))
            "ajrepl/"
-           "vendor/"
            "janet-last-expression/"
            "janet-last-expression/"
            "last-expression.janet"))
