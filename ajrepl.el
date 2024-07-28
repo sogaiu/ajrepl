@@ -236,6 +236,7 @@ a column zero target."
         (when-let ((code (ajrepl--helper beg end)))
           (ajrepl-send-code code))))))
 
+;; XXX: improve with treesitter?
 (defun ajrepl-send-expression-upscoped ()
   "Send expression at point wrapped in (upscope ... :done).
 
