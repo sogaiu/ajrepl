@@ -134,6 +134,15 @@
            "last-expression.janet"))
   "Path to helper program to determine last paren expression.")
 
+(defvar ajrepl--repl-helper-path
+  (expand-file-name
+   (concat (expand-file-name
+            (file-name-directory (or load-file-name
+                                     buffer-file-name)))
+           "ajrepl/"
+           "custom-repl.janet"))
+  "Path to helper program for repl customization.")
+
 (defvar ajrepl--debug-output
   nil
   "If non-nil, output debug info to *Messages* buffer.")
@@ -391,7 +400,9 @@ The following keys are available in `ajrepl-interaction-mode`:
                                          "--eval-command=run"
                                          "--args" "janet" "-s")
                 (make-comint-in-buffer "ajrepl" ajrepl-repl-buffer-name
-                                       "janet" nil "-s"))
+                                       "janet" nil "-s"
+                                       ;"janet" nil ajrepl--repl-helper-path
+                                       ))
             (goto-char (point-max))
             (ajrepl-mode)
             (pop-to-buffer (current-buffer))
