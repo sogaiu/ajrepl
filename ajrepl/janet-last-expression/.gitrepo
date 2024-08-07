@@ -6,7 +6,7 @@
 [subrepo]
 	remote = https://github.com/sogaiu/janet-last-expression
 	branch = master
-	commit = ad14a78cedfed2910f756af783fe99068151a4e0
-	parent = 7561ef09cd6df36f0aef63eecf17e371356db484
+	commit = f49c2e02c39f298b4dd88d5840109cacae0e101f
+	parent = 051da16f61b629684b14766af1ce5494bfde0b4b
 	method = merge
 	cmdver = 0.4.9
