@@ -94,28 +94,21 @@
 (require 'comint)
 (require 'ajrepl-core)
 
-;;;; The Rest
+;; https://emacs.stackexchange.com/a/30086
+(when (not (require 'ajrepl-ts nil 'noerror))
+  (defun ajrepl-send-top-level-expression ()
+    "Send top-level expression containing point."
+    (interactive)
+    (save-excursion
+      (let ((beg nil)
+            (end nil))
+        (ajrepl--column-zero-target-backward)
+        (setq beg (point))
+        (forward-sexp)
+        (setq end (point))
+        (ajrepl-send-region beg end)))))
 
-(defun ajrepl-send-region (start end)
-  "Send a region bounded by START and END."
-  (interactive "r")
-  (let ((here (point))
-        (original-buffer (current-buffer))
-        (repl-buffer (get-buffer ajrepl-repl-buffer-name)))
-    (if (not repl-buffer)
-        (message (format "%s is missing..." ajrepl-repl-buffer-name))
-      ;; switch to ajrepl buffer to prepare for appending
-      (set-buffer repl-buffer)
-      (goto-char (point-max))
-      ;; switch back
-      (set-buffer original-buffer)
-      (let ((code-str (ajrepl-trim-trailing-newline-maybe
-                       (buffer-substring-no-properties start end))))
-        (set-buffer repl-buffer)
-        (insert code-str)
-        (comint-send-input)
-        (set-buffer original-buffer)
-        (goto-char here)))))
+;;;; The Rest
 
 (defun ajrepl-send-buffer ()
   "Send buffer content."
@@ -329,6 +322,7 @@ This is to avoid copious output from evaluating certain forms."
   (let ((map (make-sparse-keymap)))
     (define-key map "\C-c\C-b" 'ajrepl-send-buffer)
     (define-key map "\C-x\C-e" 'ajrepl-send-expression-at-point)
+    (define-key map "\C-\M-x" 'ajrepl-send-top-level-expression)
     (define-key map "\C-c\C-u" 'ajrepl-send-expression-upscoped)
     (define-key map "\C-c\C-r" 'ajrepl-send-region)
     (define-key map "\C-c\C-i" 'ajrepl-insert-last-output)
@@ -339,6 +333,7 @@ This is to avoid copious output from evaluating certain forms."
       '("Ajrepl"
         ["Send buffer" ajrepl-send-buffer t]
         ["Send expression at point" ajrepl-send-expression-at-point t]
+        ["Send top-level expression" ajrepl-send-top-level-expression t]
         ["Send expression upscoped" ajrepl-send-expression-upscoped t]
         ["Send region" ajrepl-send-region t]
         "--"

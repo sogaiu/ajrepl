@@ -87,6 +87,27 @@
           (goto-char (point-max))
         (goto-char here)))))
 
+(defun ajrepl-send-region (start end)
+  "Send a region bounded by START and END."
+  (interactive "r")
+  (let ((here (point))
+        (original-buffer (current-buffer))
+        (repl-buffer (get-buffer ajrepl-repl-buffer-name)))
+    (if (not repl-buffer)
+        (message (format "%s is missing..." ajrepl-repl-buffer-name))
+      ;; switch to ajrepl buffer to prepare for appending
+      (set-buffer repl-buffer)
+      (goto-char (point-max))
+      ;; switch back
+      (set-buffer original-buffer)
+      (let ((code-str (ajrepl-trim-trailing-newline-maybe
+                       (buffer-substring-no-properties start end))))
+        (set-buffer repl-buffer)
+        (insert code-str)
+        (comint-send-input)
+        (set-buffer original-buffer)
+        (goto-char here)))))
+
 ;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;
 
 (defun ajrepl-send-string (string &optional process)
