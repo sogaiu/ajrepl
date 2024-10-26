@@ -94,20 +94,6 @@
 (require 'comint)
 (require 'ajrepl-core)
 
-;; https://emacs.stackexchange.com/a/30086
-(when (not (require 'ajrepl-ts nil 'noerror))
-  (defun ajrepl-send-top-level-expression ()
-    "Send top-level expression containing point."
-    (interactive)
-    (save-excursion
-      (let ((beg nil)
-            (end nil))
-        (ajrepl--column-zero-target-backward)
-        (setq beg (point))
-        (forward-sexp)
-        (setq end (point))
-        (ajrepl-send-region beg end)))))
-
 ;;;; The Rest
 
 (defun ajrepl-send-buffer ()
@@ -259,6 +245,70 @@ This is to avoid copious output from evaluating certain forms."
         (when-let ((code (ajrepl--helper beg end)))
           (ajrepl-send-code (format "(upscope\n%s\n:done)" code)))))))
 
+;; XXX: revisit behavior for when point is in a top-level comment
+;; XXX: doesn't handle the leading @ portions of tables, arrays, buffers
+;;      nor leading |, ~, ', ;, or commas...
+;; XXX: backward-sexp doesn't seem to function correctly in emacs-lisp
+;;      in the case of:
+;;
+;;      (''a ' 'b '''c)
+;;
+;;      starting with point at the closing paren, two invocations of
+;;      backward-sexp brings the point to rest one position to the left
+;;      of b.  it should end up two characters further to the left,
+;;      beyond one space and on to the single quote that comes after
+;;      the a.
+;;
+;;      in contrast, forward-sexp starting at a, functions as expected.
+(defun ajrepl-send-expr-dwim ()
+  "Send intended expression.
+
+Sends a sensible outer-most expression that contains point.
+
+1. If none of point's ancestor expressions are `(comment ...)'
+   forms, send the top-level expression containing point.
+
+2. If there is at least one ancestor `(comment ...)' form
+   containing point, send the outer-most expression that contains
+   no `(comment ...)' forms and still contains point.
+
+3. If point is outside of all top-level expressions, sits after a
+   top-level expression, and is on the last line of that
+   expression, the preceding top-level expression is sent.  This
+   matches the behavior of Emacs' `eval-defun'.
+
+In all other cases, do nothing.
+
+Note that case 2 is basically about trying to avoid sending
+`(comment ...)'  forms which would just result in nil.
+
+Note also that Emacs' `eval-defun' behaves differently when point
+is outside of all top-level expression, on a blank line, and
+there is a following \"defun\".  In such a case, the \"defun\" is
+evaluated.  This behavior seemed strange and is not emulated
+here."
+  (interactive)
+  (save-excursion
+    (let ((before nil)
+          (after nil)
+          (beg nil)
+          (end nil))
+      (setq before (point))
+      (ajrepl-backward-up-to-non-comment-form)
+      (setq after (point))
+      ;; XXX: re-analyze to determine cases
+      ;;
+      ;; XXX: this condition is wrong -- it also ends up applying
+      ;;      in the case that point is at the opening delimiter of
+      ;;      (def a 1) at the top-level, which it shouldn't
+      (if (eql before after)
+        (ajrepl-back-to-start-of-expr)
+        )
+      (setq beg (point))
+      (forward-sexp)
+      (setq end (point))
+      (ajrepl-send-region beg end))))
+
 (defun ajrepl-switch-to-repl ()
   "Switch to the repl buffer named by `ajrepl-repl-buffer-name`."
   (interactive)
@@ -322,7 +372,7 @@ This is to avoid copious output from evaluating certain forms."
   (let ((map (make-sparse-keymap)))
     (define-key map "\C-c\C-b" 'ajrepl-send-buffer)
     (define-key map "\C-x\C-e" 'ajrepl-send-expression-at-point)
-    (define-key map "\C-\M-x" 'ajrepl-send-top-level-expression)
+    (define-key map "\C-\M-x" 'ajrepl-send-expr-dwim)
     (define-key map "\C-c\C-u" 'ajrepl-send-expression-upscoped)
     (define-key map "\C-c\C-r" 'ajrepl-send-region)
     (define-key map "\C-c\C-i" 'ajrepl-insert-last-output)
@@ -333,7 +383,7 @@ This is to avoid copious output from evaluating certain forms."
       '("Ajrepl"
         ["Send buffer" ajrepl-send-buffer t]
         ["Send expression at point" ajrepl-send-expression-at-point t]
-        ["Send top-level expression" ajrepl-send-top-level-expression t]
+        ["Send intended expression" ajrepl-send-expr-dwim t]
         ["Send expression upscoped" ajrepl-send-expression-upscoped t]
         ["Send region" ajrepl-send-region t]
         "--"

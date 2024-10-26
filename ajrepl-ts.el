@@ -5,12 +5,6 @@
 ;;; Code:
 
 (require 'ajrepl-core)
-
-(declare-function treesit-available-p "treesit.c")
-
-(when (not (treesit-available-p))
-  (error "Tree-sitter is not available"))
-
 (require 'treesit)
 
 (declare-function treesit-node-child "treesit.c")
@@ -19,8 +13,8 @@
 (declare-function treesit-node-start "treesit.c")
 (declare-function treesit-node-type "treesit.c")
 
-(defun ajrepl--ts-between-top-level-exprs-p (&optional pos)
-  "Check if between top-level expressions.
+(defun ajrepl--ts-outside-top-level-exprs-p (&optional pos)
+  "Check if not inside any top-level expression.
 
 Optional argument `POS' specifies the point to check.  If unspecified
 the value of point is used for checking.
@@ -64,7 +58,18 @@ not moved beyond (or up to) any containing comment forms.
 
 If point is not within a top-level expression, an error is raised."
   (interactive)
-  (when (ajrepl--ts-between-top-level-exprs-p)
+  ;; the intention of the check below is to distinguish between two
+  ;; edge cases and act differently depending on what is encountered:
+  ;;
+  ;; 1) point is immediately after a top-level form, though on the
+  ;;    same line as the last character of the expression,
+  ;;
+  ;; 2) point is on a "blank" line outside of all top-level
+  ;;    expressions
+  ;;
+  ;; the check is intended to block case 2 but allow case 1.
+  (when (and (ajrepl--ts-outside-top-level-exprs-p)
+             (ajrepl-line-empty-p))
     (error "Point is not within a top-level expression"))
   (let ((ceiling-node
          (treesit-parent-until
@@ -75,10 +80,41 @@ If point is not within a top-level expression, an error is raised."
                       (ajrepl--ts-comment-form-p parent)))
                 (ajrepl--ts-comment-form-p node)))
           'include-node)))
-    (goto-char (treesit-node-start ceiling-node))))
+    (goto-char (treesit-node-start
+                (if (treesit-node-check ceiling-node 'named)
+                    ceiling-node
+                  (treesit-node-parent ceiling-node))))))
 
-(defun ajrepl-send-top-level-expression ()
-  "Send top-level expression containing point."
+;; XXX: this is not quite as nice as `ajrepl-send-expression-at-point'
+;;      for the case where point is on a line with a comment that is
+;;      outside of all top-level forms.
+(defun ajrepl-ts-send-expr-dwim ()
+  "Send intended expression.
+
+Sends a sensible outer-most expression that contains point.
+
+1. If none of point's ancestor expressions are `(comment ...)'
+   forms, send the top-level expression containing point.
+
+2. If there is at least one ancestor `(comment ...)' form
+   containing point, send the outer-most expression that contains
+   no `(comment ...)' forms and still contains point.
+
+3. If point is outside of all top-level expressions, sits after a
+   top-level expression, and is on the last line of that
+   expression, the preceding top-level expression is sent.  This
+   matches the behavior of Emacs' `eval-defun'.
+
+In all other cases, do nothing.
+
+Note that case 2 is basically about trying to avoid sending
+`(comment ...)'  forms which would just result in nil.
+
+Note also that Emacs' `eval-defun' behaves differently when point
+is outside of all top-level expression, on a blank line, and
+there is a following \"defun\".  In such a case, the \"defun\" is
+evaluated.  This behavior seemed strange and is not emulated
+here."
   (interactive)
   (save-excursion
     (ajrepl-ts-climb-to-ceiling)
