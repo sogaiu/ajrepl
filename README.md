@@ -93,6 +93,7 @@ is likely:
 
     * Send buffer (`C-c C-b`)
     * Send expression at point (`C-x C-e`)
+    * Send top-level expression at point (`C-M-x`)
     * Send expression upscoped (`C-c C-u`) - see below for details
     * Send region (`C-c C-r`)
 
