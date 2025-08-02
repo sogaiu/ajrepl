@@ -93,6 +93,7 @@
 
 (require 'comint)
 (require 'ajrepl-core)
+(require 'thingatpt)
 
 ;;;; The Rest
 
@@ -116,6 +117,15 @@
         (comint-send-input)
         (set-buffer original-buffer)
         (goto-char here)))))
+
+(defun ajrepl-send-top-level-expression ()
+  "Send top-level expression containing point."
+  (interactive)
+  (save-excursion
+    (when-let* ((defun-region (bounds-of-thing-at-point 'defun))
+                (beg (car defun-region))
+                (end (cdr defun-region)))
+      (ajrepl-send-region beg end))))
 
 (defun ajrepl-send-buffer ()
   "Send buffer content."
@@ -329,6 +339,7 @@ This is to avoid copious output from evaluating certain forms."
   (let ((map (make-sparse-keymap)))
     (define-key map "\C-c\C-b" 'ajrepl-send-buffer)
     (define-key map "\C-x\C-e" 'ajrepl-send-expression-at-point)
+    (define-key map "\C-\M-x" 'ajrepl-send-top-level-expression)
     (define-key map "\C-c\C-u" 'ajrepl-send-expression-upscoped)
     (define-key map "\C-c\C-r" 'ajrepl-send-region)
     (define-key map "\C-c\C-i" 'ajrepl-insert-last-output)
@@ -339,6 +350,7 @@ This is to avoid copious output from evaluating certain forms."
       '("Ajrepl"
         ["Send buffer" ajrepl-send-buffer t]
         ["Send expression at point" ajrepl-send-expression-at-point t]
+        ["Send top-level expression" ajrepl-send-top-level-expression t]
         ["Send expression upscoped" ajrepl-send-expression-upscoped t]
         ["Send region" ajrepl-send-region t]
         "--"
