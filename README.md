@@ -15,9 +15,36 @@ is likely:
 
 * Clone this repository.
 
+### Manual
+
+* If you cloned to `~/src/ajrepl`, add the following to your
+  `.emacs`-equivalent:
+    ```elisp
+    (add-to-list 'load-path
+                 (expand-file-name "~/src/ajrepl"))
+
+    (require 'ajrepl)
+
+    (add-hook 'janet-ts-mode-hook
+              #'ajrepl-interaction-mode)
+    ```
+
+### Elpaca
+
+* Add something like the following to your `.emacs`-equivalent:
+    ```elisp
+    (use-package ajrepl
+      :elpaca (:host github
+               :repo "sogaiu/ajrepl"
+               :files ("*.el" "ajrepl"))
+      :config
+      (add-hook 'janet-ts-mode-hook
+                #'ajrepl-interaction-mode))
+    ```
+
 ### straight.el
 
-* I add the following sort of thing to my `.emacs`-equivalent:
+* Add something like the following to your `.emacs`-equivalent:
     ```elisp
     (straight-use-package
       '(ajrepl :host github
@@ -49,23 +76,9 @@ is likely:
                 #'ajrepl-interaction-mode))
     ```
 
-### Vanilla
-
-* If you cloned to `~/src/ajrepl`, add the following to your
-  `.emacs`-equivalent:
-    ```elisp
-    (add-to-list 'load-path
-                 (expand-file-name "~/src/ajrepl"))
-
-    (require 'ajrepl)
-
-    (add-hook 'janet-ts-mode-hook
-              #'ajrepl-interaction-mode)
-    ```
-
 ### package.el
 
-* Sorry, no support for that.  The Vanilla instructions should work
+* Sorry, no support for that.  The manual instructions should work
   though.
 
 ## Usage
