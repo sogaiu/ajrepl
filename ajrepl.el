@@ -56,9 +56,12 @@
 ;;
 ;;      Send buffer
 ;;      Send expression at point
+;;      Send top-level expression
+;;      Send expression upscoped
 ;;      Send region
 ;;
 ;;      Insert last output
+;;      Insert rest of usage
 ;;
 ;;      Start REPL
 ;;      Switch to REPL
