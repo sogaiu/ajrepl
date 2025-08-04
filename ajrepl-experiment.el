@@ -160,7 +160,7 @@ This is to ascertain the length of data."
 
 (define-key-after ajrepl-interaction-mode-map
   [menu-bar ajrepl ilo-item]
-  '("Insert last ouput" . ajrepl-insert-last-output))
+  '("Insert last output" . ajrepl-insert-last-output))
 
 (define-key ajrepl-interaction-mode-map "\C-c\C-i"
             'ajrepl-insert-last-output)
