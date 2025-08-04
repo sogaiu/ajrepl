@@ -59,6 +59,21 @@ This is to ascertain the length of data."
   (interactive)
   (ajrepl-send-code "(setdyn :pretty-format \"%.20M\")"))
 
+(defun ajrepl-simplify-repl-prompt ()
+  "Set :repl-prompt to be less informative."
+  (interactive)
+  (ajrepl-send-code
+   (concat "(setdyn :repl-prompt\n"
+           "  (fn [p]\n"
+           "    (if (empty? (get (parser/state p) :delimiters))\n"
+           "      `repl> `\n"
+           "      (string))))")))
+
+(defun ajrepl-reset-repl-prompt ()
+  "Set :repl-prompt to be less informative."
+  (interactive)
+  (ajrepl-send-code "(setdyn :repl-prompt nil)"))
+
 (defun ajrepl-redefine-comment-macro ()
   "Redefine comment macro."
   (interactive)
@@ -149,6 +164,14 @@ This is to ascertain the length of data."
 (define-key-after ajrepl-interaction-mode-map
   [menu-bar ajrepl spf-item]
   '("Multiline Formatting" . ajrepl-set-pretty-format))
+
+(define-key-after ajrepl-interaction-mode-map
+  [menu-bar ajrepl srp-item]
+  '("Simplify repl prompt" . ajrepl-simplify-repl-prompt))
+
+(define-key-after ajrepl-interaction-mode-map
+  [menu-bar ajrepl rrp-item]
+  '("Reset repl prompt" . ajrepl-reset-repl-prompt))
 
 (define-key-after ajrepl-interaction-mode-map
   [menu-bar ajrepl rdcm-item]
