@@ -60,9 +60,6 @@
 ;;      Send expression upscoped
 ;;      Send region
 ;;
-;;      Insert last output
-;;      Insert rest of usage
-;;
 ;;      Start REPL
 ;;      Switch to REPL
 
@@ -284,60 +281,6 @@ This is to avoid copious output from evaluating certain forms."
   (interactive)
   (pop-to-buffer ajrepl-repl-buffer-name))
 
-;; XXX: assumes that output from process does not contain strings that match
-;;      repl prompt
-;;
-;; XXX: in some cases comint-last-output-start was reporting incorrect
-;;      values.  the current approach (relying on searching for ajrepl-prompt)
-;;      tries to work around that.
-(defun ajrepl-insert-last-output ()
-  "Insert last evaluation result."
-  (interactive)
-  ;; XXX: temporary measure to avoid problems?
-  (if (eq last-command 'ajrepl-send-buffer)
-      (message "Sorry, this doesn't work right after ajrepl-send-buffer.")
-    (let ((original-buffer (current-buffer))
-          (repl-buffer (get-buffer ajrepl-repl-buffer-name))
-          (last-output ""))
-      (if (not repl-buffer)
-          (message (format "%s is missing..." ajrepl-repl-buffer-name))
-        ;; switch to ajrepl buffer to prepare for appending
-        (set-buffer repl-buffer)
-        (save-excursion
-          (let ((start nil)
-                (multiline nil))
-            (goto-char (point-max))
-            (when (and (re-search-backward ajrepl-prompt)
-                       (re-search-backward ajrepl-prompt))
-              (setq multiline
-                    (not (looking-at "repl:[0-9]+:>" :inhibit-modify)))
-              (when (re-search-forward ajrepl-prompt)
-                (when (not multiline)
-                  ;; XXX: might not work for all cases...keep an eye out
-                  (forward-sexp))
-                (setq start (point))
-                (when (and (re-search-forward ajrepl-prompt)
-                           (re-search-backward ajrepl-prompt))
-                  (setq last-output
-                        (string-trim
-                         (buffer-substring-no-properties start (point)))))))))
-        (set-buffer original-buffer)
-        (if (not last-output)
-            (message "Did not identify last output")
-          (insert last-output))))))
-
-;; XXX: hacky because of the waiting
-(defun ajrepl-insert-rest-of-usage ()
-  "Insert rest of usage."
-  (interactive)
-  (newline-and-indent)
-  (insert "# =>")
-  (newline-and-indent)
-  (ajrepl-send-expression-at-point)
-  ;; XXX
-  (sit-for 0.1)
-  (ajrepl-insert-last-output))
-
 (defvar ajrepl-interaction-mode-map
   (let ((map (make-sparse-keymap)))
     (define-key map "\C-c\C-b" 'ajrepl-send-buffer)
@@ -345,8 +288,6 @@ This is to avoid copious output from evaluating certain forms."
     (define-key map "\C-\M-x" 'ajrepl-send-top-level-expression)
     (define-key map "\C-c\C-u" 'ajrepl-send-expression-upscoped)
     (define-key map "\C-c\C-r" 'ajrepl-send-region)
-    (define-key map "\C-c\C-i" 'ajrepl-insert-last-output)
-    (define-key map "\C-c\C-c" 'ajrepl-insert-rest-of-usage)
     (define-key map "\C-c\C-z" 'ajrepl-switch-to-repl)
     (easy-menu-define ajrepl-interaction-mode-map map
       "A Janet REPL Interaction Mode Menu"
@@ -356,9 +297,6 @@ This is to avoid copious output from evaluating certain forms."
         ["Send top-level expression" ajrepl-send-top-level-expression t]
         ["Send expression upscoped" ajrepl-send-expression-upscoped t]
         ["Send region" ajrepl-send-region t]
-        "--"
-        ["Insert last output" ajrepl-insert-last-output t]
-        ["Insert rest of usage" ajrepl-insert-rest-of-usage t]
         "--"
         ["Start REPL" ajrepl t]
         ["Switch to REPL" ajrepl-switch-to-repl t]))
