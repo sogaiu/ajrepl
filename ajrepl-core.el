@@ -30,9 +30,6 @@
 (defvar ajrepl-repl-buffer-name "*ajrepl-repl*"
   "Name of repl buffer.")
 
-(defvar ajrepl-prompt "repl:[^>]+> "
-  "Regular expression to match Janet repl prompt.")
-
 (defun ajrepl-get-process ()
   "Return Janet process for repl buffer."
   (get-buffer-process ajrepl-repl-buffer-name))
