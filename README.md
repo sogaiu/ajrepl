@@ -115,6 +115,9 @@ If the file is required, it should add some additional things to the
 `Ajrepl` menu.  Alternatively, using the "Enable Experimental
 Features" menu item under the `Ajrepl` menu may work too.
 
+## Credits
+
+* sbocq - discussion and code about `eval-defun`
 
 ## Issues
 
