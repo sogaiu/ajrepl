@@ -167,6 +167,14 @@
 
 Requires the janet binary be built with debug symbols.")
 
+(defvar ajrepl--experimental-path
+  (expand-file-name
+   (concat (expand-file-name
+            (file-name-directory (or load-file-name
+                                     buffer-file-name)))
+           "ajrepl-experiment.el"))
+  "The full path to `'ajrepl-experiment.el'.")
+
 (defun ajrepl--helper (start end)
   "Determine last paren expression by asking Janet.
 
@@ -281,6 +289,17 @@ This is to avoid copious output from evaluating certain forms."
   (interactive)
   (pop-to-buffer ajrepl-repl-buffer-name))
 
+(defun ajrepl-load-exerimental ()
+  "Load experimental features."
+  (interactive)
+  ;; not using `require' here because that would mean `load-path'
+  ;; would have to contain the directory that houses
+  ;; `ajrepl-experiment.el'.  using `load-file' is more convenient in
+  ;; case someone evaluates the current file using `eval-buffer'.
+  ;; this means the containing directory is not required to be on
+  ;; `load-path' for this feature to work.
+  (load-file ajrepl--experimental-path))
+
 (defvar ajrepl-interaction-mode-map
   (let ((map (make-sparse-keymap)))
     (define-key map "\C-c\C-b" 'ajrepl-send-buffer)
@@ -299,7 +318,10 @@ This is to avoid copious output from evaluating certain forms."
         ["Send region" ajrepl-send-region t]
         "--"
         ["Start REPL" ajrepl t]
-        ["Switch to REPL" ajrepl-switch-to-repl t]))
+        ["Switch to REPL" ajrepl-switch-to-repl t]
+        "--"
+        ["Enable Experimental Features" ajrepl-load-exerimental
+         (not (featurep 'ajrepl-experiment))]))
     map)
   "Ajrepl interaction mode map.")
 

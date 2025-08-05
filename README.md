@@ -112,7 +112,9 @@ There's also a file named `ajrepl-experiment.el` that contains some
 experimental (aka "may not stick around") functionality.
 
 If the file is required, it should add some additional things to the
-`Ajrepl` menu.
+`Ajrepl` menu.  Alternatively, using the "Enable Experimental
+Features" menu item under the `Ajrepl` menu may work too.
+
 
 ## Issues
 
