@@ -69,6 +69,16 @@ This is to ascertain the length of data."
            "      `repl> `\n"
            "      \"\")))")))
 
+(defun ajrepl-timestampify-repl-prompt ()
+  "Make :repl-prompt use a timestamp."
+  (interactive)
+  (ajrepl-send-code
+   (concat "(setdyn :repl-prompt\n"
+           "  (fn [p]\n"
+           "    (if (empty? (get (parser/state p) :delimiters))\n"
+           "      (string (os/strftime \"%Y-%m-%d %H:%M:%S\\n\"))\n"
+           "      \"\")))")))
+
 (defun ajrepl-reset-repl-prompt ()
   "Reset :repl-prompt."
   (interactive)
@@ -122,6 +132,10 @@ This is to ascertain the length of data."
 (define-key-after ajrepl-interaction-mode-map
   [menu-bar ajrepl srp-item]
   '("Simplify repl prompt" . ajrepl-simplify-repl-prompt))
+
+(define-key-after ajrepl-interaction-mode-map
+  [menu-bar ajrepl trp-item]
+  '("Timestampify repl prompt" . ajrepl-timestampify-repl-prompt))
 
 (define-key-after ajrepl-interaction-mode-map
   [menu-bar ajrepl rrp-item]
