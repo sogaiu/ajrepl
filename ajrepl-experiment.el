@@ -70,7 +70,7 @@ This is to ascertain the length of data."
            "      (string))))")))
 
 (defun ajrepl-reset-repl-prompt ()
-  "Set :repl-prompt to be less informative."
+  "Reset :repl-prompt."
   (interactive)
   (ajrepl-send-code "(setdyn :repl-prompt nil)"))
 
