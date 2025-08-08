@@ -117,6 +117,7 @@ Features" menu item under the `Ajrepl` menu may work too.
 
 ## Credits
 
+* sarna - discussion about repl buffer messiness
 * sbocq - discussion and code about `eval-defun`
 
 ## Issues
