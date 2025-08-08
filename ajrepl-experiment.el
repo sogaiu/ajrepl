@@ -60,14 +60,14 @@ This is to ascertain the length of data."
   (ajrepl-send-code "(setdyn :pretty-format \"%.20M\")"))
 
 (defun ajrepl-simplify-repl-prompt ()
-  "Set :repl-prompt to be less informative."
+  "Make :repl-prompt simpler."
   (interactive)
   (ajrepl-send-code
    (concat "(setdyn :repl-prompt\n"
            "  (fn [p]\n"
            "    (if (empty? (get (parser/state p) :delimiters))\n"
            "      `repl> `\n"
-           "      (string))))")))
+           "      \"\")))")))
 
 (defun ajrepl-reset-repl-prompt ()
   "Reset :repl-prompt."
