@@ -76,7 +76,8 @@ This is to ascertain the length of data."
    (concat "(setdyn :repl-prompt\n"
            "  (fn [p]\n"
            "    (if (empty? (get (parser/state p) :delimiters))\n"
-           "      (string (os/strftime \"%Y-%m-%d %H:%M:%S\\n\"))\n"
+           "      (string \"\\n\"\n"
+           "              (os/strftime \"%Y-%m-%d %H:%M:%S\\n\\n\"))\n"
            "      \"\")))")))
 
 (defun ajrepl-reset-repl-prompt ()
