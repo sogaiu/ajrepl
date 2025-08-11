@@ -122,6 +122,16 @@ Features" menu item under the `Ajrepl` menu may work too.
 
 ## Issues
 
-* The REPL buffer gets very messy due to prompt information from Janet.
-  I don't know if there is a good way to address this without using
-  netrepl.
+* The REPL buffer gets very messy due to prompt information from
+  `janet`.
+  
+  There are some commands in `ajrepl-experiment.el` (see above for how
+  to enable) that are an attempt to improve this situation:
+
+  * `ajrepl-simplify-repl-prompt`
+  * `ajrepl-timestampify-repl-prompt`
+
+  For more details, have a look starting at [this issue
+  comment](https://github.com/sogaiu/ajrepl/issues/4#issuecomment-3149618006)
+  and later.
+
