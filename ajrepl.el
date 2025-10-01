@@ -355,13 +355,19 @@ The following keys are available in `ajrepl-interaction-mode`:
   :lighter " ajrepl"
   :keymap ajrepl-interaction-mode-map)
 
+(defcustom ajrepl-janet-command '("janet")
+  "Command to run when starting ajrepl"
+  :type '(repeat string))
+
 ;;;###autoload
 (defun ajrepl ()
   "Start ajrepl."
   (interactive)
   (let ((start-buffer (current-buffer))
         ;; XXX: work-around
-        (better-dir default-directory))
+        (better-dir default-directory)
+        (ajrepl-janet-exec (car ajrepl-janet-command))
+        (ajrepl-janet-args (cdr ajrepl-janet-command)))
     (unless
         ;;(ignore-errors ;; XXX: uncomment at some point...
         (with-current-buffer (get-buffer-create ajrepl-repl-buffer-name)
@@ -369,14 +375,16 @@ The following keys are available in `ajrepl-interaction-mode`:
           (setq default-directory better-dir)
           (prog1
               (if ajrepl--run-under-gdb
-                  (make-comint-in-buffer "ajrepl" ajrepl-repl-buffer-name
-                                         "gdb" nil
-                                         "--quiet"
-                                         "--eval-command=run"
-                                         "--args" "janet" "-s")
-                (make-comint-in-buffer "ajrepl" ajrepl-repl-buffer-name
-                                       "janet" nil "-s"
-                                       ;"janet" nil ajrepl--repl-helper-path
+                  (apply #'make-comint-in-buffer `("ajrepl" ,ajrepl-repl-buffer-name
+                                                   "gdb" ,nil
+                                                   "--quiet"
+                                                   "--eval-command=run"
+                                                   "--args" ,ajrepl-janet-exec "-s"
+                                                   ,@ajrepl-janet-args))
+                (apply #'make-comint-in-buffer `("ajrepl" ,ajrepl-repl-buffer-name
+                                                 ,ajrepl-janet-exec nil "-s"
+                                                 ,@ajrepl-janet-args)
+                                        ;"janet" nil ajrepl--repl-helper-path
                                        ))
             (goto-char (point-max))
             (ajrepl-mode)
