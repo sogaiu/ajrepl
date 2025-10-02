@@ -97,6 +97,18 @@
 
 ;;;; The Rest
 
+(defgroup ajrepl nil
+  "A Janet REPL."
+  :prefix "ajrepl-"
+  :group 'tools)
+
+;; hint for using with gdb:
+;;
+;; '("gdb" "--quiet" "--eval-command=run" "--args" "janet" "-s")
+(defcustom ajrepl-start-cmd-line '("janet" "-s")
+  "Command line to start repl."
+  :type '(repeat string))
+
 (defun ajrepl-send-region (start end)
   "Send a region bounded by START and END."
   (interactive "r")
@@ -160,12 +172,6 @@
 (defvar ajrepl--temp-buffers
   '()
   "List of buffers to clean up before executing `ajrepl--helper'.")
-
-(defvar ajrepl--run-under-gdb
-  nil
-  "If non-nil, start janet binary under the control of gdb.
-
-Requires the janet binary be built with debug symbols.")
 
 (defvar ajrepl--experimental-path
   (expand-file-name
@@ -361,28 +367,22 @@ The following keys are available in `ajrepl-interaction-mode`:
   (interactive)
   (let ((start-buffer (current-buffer))
         ;; XXX: work-around
-        (better-dir default-directory))
+        (better-dir default-directory)
+        (exe (car ajrepl-start-cmd-line))
+        (args (cdr ajrepl-start-cmd-line)))
     (unless
         ;;(ignore-errors ;; XXX: uncomment at some point...
         (with-current-buffer (get-buffer-create ajrepl-repl-buffer-name)
           ;; XXX: work-around
           (setq default-directory better-dir)
-          (prog1
-              (if ajrepl--run-under-gdb
-                  (make-comint-in-buffer "ajrepl" ajrepl-repl-buffer-name
-                                         "gdb" nil
-                                         "--quiet"
-                                         "--eval-command=run"
-                                         "--args" "janet" "-s")
-                (make-comint-in-buffer "ajrepl" ajrepl-repl-buffer-name
-                                       "janet" nil "-s"
-                                       ;"janet" nil ajrepl--repl-helper-path
-                                       ))
-            (goto-char (point-max))
-            (ajrepl-mode)
-            (pop-to-buffer (current-buffer))
-            (goto-char (point-max))
-            (pop-to-buffer start-buffer)))
+          (apply #'make-comint-in-buffer
+                 `("ajrepl" ,ajrepl-repl-buffer-name
+                   ,exe nil ,@args))
+          (goto-char (point-max))
+          (ajrepl-mode)
+          (pop-to-buffer (current-buffer))
+          (goto-char (point-max))
+          (pop-to-buffer start-buffer))
       (message "Failed to connect to janet"))))
 
 (provide 'ajrepl)
