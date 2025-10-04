@@ -125,14 +125,20 @@ Features" menu item under the `Ajrepl` menu may work too.
 
 * The REPL buffer gets very messy due to prompt information from
   `janet`.
-  
-  There are some commands in `ajrepl-experiment.el` (see above for how
-  to enable) that are an attempt to improve this situation:
 
-  * `ajrepl-simplify-repl-prompt`
-  * `ajrepl-timestampify-repl-prompt`
+  There are a couple ways this might be mitigated / addressed:
 
-  For more details, have a look starting at [this issue
-  comment](https://github.com/sogaiu/ajrepl/issues/4#issuecomment-3149618006)
-  and later.
+  1. There are some commands in `ajrepl-experiment.el` (see above for how
+     to enable) that are an attempt to improve this situation:
+
+     * `ajrepl-simplify-repl-prompt`
+     * `ajrepl-timestampify-repl-prompt`
+
+     For more details, have a look starting at [this issue
+     comment](https://github.com/sogaiu/ajrepl/issues/4#issuecomment-3149618006)
+     and later.
+
+  2. Removing `-s` from `ajrepl-start-cmd-line` (which by default is
+     `'("janet" "-s")`) as described
+     [here](https://github.com/sogaiu/ajrepl/pull/5#issuecomment-3366687560).
 
