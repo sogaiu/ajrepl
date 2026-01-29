@@ -1,0 +1,6 @@
+{
+ # describes what to test - file and dir paths
+ :includes ["ajrepl"]
+ # describes what to skip - file paths only
+ :excludes []
+}

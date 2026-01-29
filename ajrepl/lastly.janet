@@ -1,4 +1,284 @@
-(import ./janet-delims/janet-delims :as delims)
+#! /usr/bin/env janet
+
+(comment import ./dalimit :prefix "")
+(defn d/deprintf
+  [fmt & args]
+  (when (os/getenv "VERBOSE")
+    (eprintf fmt ;args)))
+
+(comment
+
+  # example parser/state based on `{:a 1`
+  @{:delimiters "{"
+    :frames @[@{:args @[]
+                :column 0
+                :line 1
+                :type :root}
+              @{:args @[:a 1]
+                :column 1
+                :line 1
+                :type :struct}]}
+
+  )
+
+(defn d/missing-delims
+  [fragment]
+  (var missing @[])
+  (var start-pos nil)
+  (var d-type nil)
+  #
+  (def p (parser/new))
+  (parser/consume p fragment)
+  # XXX: in another code base, had a problem w/ parser/eof, but...
+  #      parser/eof is necessary for some backtick cases, e.g. not possible
+  #      to tell if ``hello`` is complete, as it could be the beginning of
+  #      ``hello```!``
+  (try
+    (parser/eof p)
+    ([err]
+      (d/deprintf "parser/eof returned error: %p" err)
+      (d/deprintf "fragment was: %s" fragment)
+      # early return indicating problem
+      (break nil)))
+  #
+  (when-let [state (parser/state p)
+             delims (state :delimiters)
+             last-frame (last (state :frames))]
+    (when (pos? (length delims))
+      (set start-pos
+           [(last-frame :line) (last-frame :column)])
+      (set d-type
+           (last-frame :type))
+      (each d (reverse delims)
+        (case d
+          (chr "(") (array/push missing ")")
+          (chr "[") (array/push missing "]")
+          (chr "{") (array/push missing "}")
+          (chr `"`) (array/push missing `"`)
+          (chr "`") (array/push missing "`")
+          # XXX: should not happen
+          (errorf "Unrecognized delimiter character: %s"
+                  (string (buffer/push-byte @"" d)))))))
+  [missing start-pos d-type])
+
+(comment
+
+  (d/missing-delims "(defn a))")
+  # =>
+  nil
+
+  (d/missing-delims "(defn a")
+  # =>
+  [@[")"] [1 1] :tuple]
+
+  (d/missing-delims "{:a 1")
+  # =>
+  [@["}"] [1 1] :struct]
+
+  (d/missing-delims "[:x :y")
+  # =>
+  [@["]"] [1 1] :tuple]
+
+  (d/missing-delims
+    (string "{:a 1\n"
+            " :b"))
+  # =>
+  [@["}"] [1 1] :struct]
+
+  (d/missing-delims
+    (string "(defn my-fn\n"
+            "  [x]\n"
+            "  (+ x 1"))
+  # =>
+  [@[")" ")"] [3 3] :tuple]
+
+  (d/missing-delims `"nice string"`)
+  # =>
+  [@[] nil nil]
+
+  (d/missing-delims `"not quite a string`)
+  # =>
+  [@[`"`] [1 1] :string]
+
+  (d/missing-delims `("what is going on?)`)
+  # =>
+  [@[`"` `)`] [1 2] :string]
+
+  (d/missing-delims "``hello``")
+  # =>
+  [@[] nil nil]
+
+  (d/missing-delims "``hello```")
+  # =>
+  [@["`"] [1 10] :string]
+
+  (d/missing-delims "@`hello")
+  # =>
+  [@["`"] [1 2] :buffer]
+
+  (d/missing-delims "1")
+  # =>
+  [@[] nil nil]
+
+  (d/missing-delims "")
+  # =>
+  [@[] nil nil]
+
+  (d/missing-delims
+    (string "``\n"
+            "  hello"))
+  # =>
+  [@["`" "`"] [1 1] :string]
+
+  )
+
+(defn d/closing-delims
+  [fragment]
+  (when-let [[delims _ _]
+             (d/missing-delims fragment)]
+    delims))
+
+(comment
+
+  (d/closing-delims "(defn a")
+  # =>
+  @[")"]
+
+  (d/closing-delims "(defn a)")
+  # =>
+  @[]
+
+  (d/closing-delims "(defn a))")
+  # =>
+  nil
+
+  (d/closing-delims "{:a 1")
+  # =>
+  @["}"]
+
+  (d/closing-delims "[:x :y")
+  # =>
+  @["]"]
+
+  (d/closing-delims
+    (string "{:a 1\n"
+            " :b"))
+  # =>
+  @["}"]
+
+  (d/closing-delims
+    (string "(defn my-fn\n"
+            "  [x]\n"
+            "  (+ x 1"))
+  # =>
+  @[")" ")"]
+
+  (d/closing-delims `"nice string"`)
+  # =>
+  @[]
+
+  (d/closing-delims `"not quite a string`)
+  # =>
+  @[`"`]
+
+  (d/closing-delims
+    (string "``\n"
+            "  hello"))
+  # =>
+  @["`" "`"]
+
+  (d/closing-delims `("what is going on?)`)
+  # =>
+  @[`"` `)`]
+
+  (d/closing-delims "``hello``")
+  # =>
+  @[]
+
+  (d/closing-delims "``hello```")
+  # =>
+  @["`"]
+
+  (d/closing-delims "@`hello")
+  # =>
+  @["`"]
+
+  (d/closing-delims "1")
+  # =>
+  @[]
+
+  (d/closing-delims "")
+  # =>
+  @[]
+
+  )
+
+(defn d/close-delims
+  [maybe-code &opt try-harder?]
+  (def delims
+    (d/closing-delims maybe-code))
+  (def cand (string maybe-code (string/join delims)))
+  (when (not try-harder?)
+    (break cand))
+  #
+  (def [ok? _] (protect (parse cand)))
+  (when ok?
+    (break cand))
+  #
+  (def new-cand (string maybe-code "\n" (string/join delims)))
+  (def [new-ok? _] (protect (parse new-cand)))
+  (assertf new-ok? "failed to close delims for: %n" maybe-code)
+  #
+  new-cand)
+
+(comment
+
+  (d/close-delims "(")
+  # =>
+  "()"
+
+  (d/close-delims "'(")
+  # =>
+  "'()"
+
+  (d/close-delims "~(smile breathe")
+  # =>
+  "~(smile breathe)"
+
+  (d/close-delims "{:a 1\n:b 2")
+  # =>
+  "{:a 1\n:b 2}"
+
+  (d/close-delims "[1 2 3 5 8")
+  # =>
+  "[1 2 3 5 8]"
+
+  (d/close-delims "{:a 1 :b [:x :y")
+  # =>
+  "{:a 1 :b [:x :y]}"
+
+  (def maybe-code
+    (string "(defn hi\n"
+            "  [x]\n"
+            "  (+ 3 (* 8\n"
+            "          (- 2 1)"))
+
+  (d/close-delims maybe-code)
+  # =>
+  (string maybe-code ")))")
+
+  (d/close-delims "[:a # hello")
+  # =>
+  "[:a # hello]"
+
+  (d/close-delims "[:a # hello" :try-harder)
+  # =>
+  (string "[:a # hello\n"
+          "]")
+
+  )
+
+
 
 (defn deprintf
   [fmt & args]
@@ -400,26 +680,18 @@
 (defn last-expr
   [maybe-code]
   # remove trailing whitespace
-  (def trimmed
-    (string/trimr maybe-code))
-  (def target-pos
-    (length trimmed))
+  (def trimmed (string/trimr maybe-code))
+  (def target-pos (length trimmed))
   # determine target span
-  (def lines
-    (string/split "\n" trimmed))
+  (def lines (string/split "\n" trimmed))
   # add any missing delimiters
-  (def delims
-    (delims/closing-delims trimmed))
-  (when (and delims
-             (not (empty? delims)))
+  (def delims (d/closing-delims trimmed))
+  (when (and delims (not (empty? delims)))
     (array/push lines (string/join delims)))
   # parse to get a tree
-  (def new-region
-    (string/join lines "\n"))
-  (def tree
-    (ast new-region))
-  (def result
-    (find-expr tree target-pos))
+  (def new-region (string/join lines "\n"))
+  (def tree (ast new-region))
+  (def result (find-expr tree target-pos))
   (when result
     (let [s (start result)
           e (end result)]

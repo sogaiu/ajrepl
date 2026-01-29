@@ -151,9 +151,7 @@
             (file-name-directory (or load-file-name
                                      buffer-file-name)))
            "ajrepl/"
-           "janet-last-expression/"
-           "janet-last-expression/"
-           "last-expression.janet"))
+           "lastly.janet"))
   "Path to helper program to determine last paren expression.")
 
 (defvar ajrepl--repl-helper-path

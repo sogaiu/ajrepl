@@ -1,0 +1,18 @@
+{:name "ajrepl"
+ :url "https://github.com/sogaiu/ajrepl"
+ :repo "git+https://github.com/sogaiu/ajrepl"
+
+ :vendored
+ [{:name "some-bundle-bits"
+   :url "https://github.com/sogaiu/some-bundle-bits"
+   :tag "7ddb7ec53a6eb8c81b0c22bb7710a01fff57a759"
+   :paths [["sbb.janet" "bundle/"]]}
+  {:name "lastly"
+   :url "https://github.com/sogaiu/lastly"
+   :tag "56884e7bd1640667ee43828786f946698ede959f"
+   :paths [["lastly.janet" "ajrepl/"]]}
+  {:name "niche"
+   :url "https://github.com/sogaiu/niche"
+   :tag "3f744cfb02b472971f82e78f16a027908a4bd717"
+   :paths [["niche.janet" "bin/"]]}]}
+
