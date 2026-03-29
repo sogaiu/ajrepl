@@ -2,9 +2,7 @@
 
 (defn install
   [manifest &]
-  (s/ddumpf "bundle script: %s hook" "install")
-  (def [tos s] (s/get-os-stuff))
-  (s/add-binscripts manifest [tos s]))
+  (s/ddumpf "bundle script: %s hook" "install"))
 
 (defn check
   [&]
