@@ -13,6 +13,6 @@
    :paths [["lastly.janet" "ajrepl/"]]}
   {:name "niche"
    :url "https://github.com/sogaiu/niche"
-   :tag "3f744cfb02b472971f82e78f16a027908a4bd717"
+   :tag "9c2832d803b39f27ffd12d1a5fc82f3b83c64b4b"
    :paths [["niche.janet" "bin/"]]}]}
 

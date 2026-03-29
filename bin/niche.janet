@@ -26,7 +26,12 @@
       (eachp [n v] locals
         (eprintf "    %s: %n" n v)))
     (when-let [e (get err :e-via-try)]
-      (eprintf "  e via try: %n" e))))
+      (eprintf "  e via try: %n" e))
+    (when-let [st (get err :stacktrace)]
+      (eprint "  stacktrace:")
+      (def lines (string/split "\n" st))
+      (each l lines
+        (eprint "    " l)))))
 
 
 (comment import ./files :prefix "")
@@ -158,20 +163,21 @@
 (comment import ./errors :prefix "")
 
 
-(def s/conf-file ".niche.jdn")
+(def s/default-conf-file ".niche.jdn")
 
 (defn s/parse-conf-file
-  [s/conf-file]
-  (def b {:in "parse-conf-file" :args {:conf-file s/conf-file}})
+  [&opt conf-file]
+  (default conf-file s/default-conf-file)
+  (def b {:in "parse-conf-file" :args {:conf-file conf-file}})
   #
-  (let [src (try (slurp s/conf-file)
+  (let [src (try (slurp conf-file)
               ([e] (e/emf (merge b {:e-via-try e})
-                          "failed to slurp: %s" s/conf-file)))
+                          "failed to slurp: %s" conf-file)))
         cnf (try (parse src)
               ([e] (e/emf (merge b {:e-via-try e})
-                          "failed to parse: %s" s/conf-file)))]
+                          "failed to parse: %s" conf-file)))]
     (when (not cnf)
-      (e/emf b "failed to load: %s" s/conf-file))
+      (e/emf b "failed to load: %s" conf-file))
     #
     (when (not (dictionary? cnf))
       (e/emf b "expected dictionary in conf, got: %s" (type cnf)))
@@ -189,14 +195,21 @@
   #
   (def head (get the-args 0))
   #
-  (when (or (= head "-h") (= head "--help")
+  (def help-types
+    {"--help" :usage
+     "-h" :usage
+     "-hh" :background
+     "-hhh" :tutorial
+     "-hhhh" :reference})
+  (def htype (get help-types head))
+  (when (or htype
             # might have been invoked with no paths in repository root
-            (and (not head) (not (f/is-file? s/conf-file))))
-    (break @{:show-help true}))
+            (and (not head) (not (f/is-file? s/default-conf-file))))
+    (break @{:show-help htype}))
   #
   (when (or (= head "-v") (= head "--version")
             # might have been invoked with no paths in repository root
-            (and (not head) (not (f/is-file? s/conf-file))))
+            (and (not head) (not (f/is-file? s/default-conf-file))))
     (break @{:show-version true}))
   #
   (def opts
@@ -221,8 +234,8 @@
       (not (empty? the-args))
       [the-args @[]]
       # conf file
-      (f/is-file? s/conf-file)
-      (s/parse-conf-file s/conf-file)
+      (f/is-file? s/default-conf-file)
+      (s/parse-conf-file s/default-conf-file)
       #
       (e/emf b "unexpected result parsing args: %n" args)))
   #
@@ -235,7 +248,8 @@
     (default right [])
     (distinct [;left ;right]))
   #
-  (merge opts
+  (merge {:overwrite true}
+         opts
          {:includes (merge-indexed includes (get opts :includes))
           :excludes (merge-indexed excludes (get opts :excludes))}))
 
@@ -248,22 +262,36 @@
   (a/parse-args ["src/main.janet"])
   # =>
   @{:excludes @[]
-    :includes @["src/main.janet"]}
+    :includes @["src/main.janet"]
+    :overwrite true}
 
   (a/parse-args ["-h"])
   # =>
-  @{:show-help true}
+  @{:show-help :usage}
 
-  (a/parse-args ["{:overwrite true}" "src/main.janet"])
+  (a/parse-args ["-hh"])
+  # =>
+  @{:show-help :background}
+
+  (a/parse-args ["-hhh"])
+  # =>
+  @{:show-help :tutorial}
+
+  (a/parse-args ["-hhhh"])
+  # =>
+  @{:show-help :reference}
+
+  (a/parse-args ["{:overwrite false}" "src/main.janet"])
   # =>
   @{:excludes @[]
     :includes @["src/main.janet"]
-    :overwrite true}
+    :overwrite false}
 
   (a/parse-args [`{:excludes ["src/args.janet"]}` "src/main.janet"])
   # =>
   @{:excludes @["src/args.janet"]
-    :includes @["src/main.janet"]}
+    :includes @["src/main.janet"]
+    :overwrite true}
 
   (setdyn :test/color? old-value)
 
@@ -416,14 +444,36 @@
   (l/note :o (o/separator str n)))
 
 (defn o/prin-form
+  [form-str &opt color indent]
+  (default color nil)
+  (default indent 0)
+  (def msg (string/trimr form-str))
+  (def lines (string/split "\n" msg))
+  #
+  (def line-0 (get lines 0))
+  (def buf-0 (buffer (if color (o/color-msg line-0 color) line-0)))
+  (l/note :o buf-0)
+  #
+  (def indent-str (string/repeat " " indent))
+  (for i 1 (length lines)
+    (l/noten :o)
+    (def line-i
+      (let [l (get lines i)]
+        (if (string/has-prefix? indent-str l)
+          (buffer/slice l indent)
+          l)))
+    (def buf-i
+      (buffer (if color (o/color-msg line-i color) line-i)))
+    (l/note :o buf-i)))
+
+(defn o/prin-data
   [form &opt color]
   (def buf @"")
   (with-dyns [:out buf]
     (printf "%m" form))
   (def msg (string/trimr buf))
   (def m-buf
-    (buffer ":\n"
-            (if color (o/color-msg msg color) msg)))
+    (buffer (if color (o/color-msg msg color) msg)))
   (l/note :o m-buf))
 
 (defn o/color-form
@@ -464,13 +514,14 @@
           (o/color-msg denom :green)))
 
 (defn o/report-fails
-  [{:num-tests total-tests :fails fails}]
+  [src {:num-tests _total-tests :fails fails}]
   (var i 0)
   (each f fails
-    (def {:test-value test-value
+    (def {:test-form _test-form
+          :test-value test-value
           :expected-value expected-value
           :line-no line-no
-          :test-form test-form} f)
+          :rest rest} f)
     (++ i)
     #
     (l/noten :o)
@@ -486,18 +537,23 @@
     (l/noten :o)
     #
     (l/noten :o)
-    (o/prin-color "form" :yellow)
-    (o/prin-form test-form)
+    (o/prin-color "form:" :yellow)
+    (l/noten :o)
+    (o/prin-form (string/slice src (get rest 0) (get rest 1))
+               nil
+               (get rest 2))
     (l/noten :o)
     #
     (l/noten :o)
-    (o/prin-color "expected" :yellow)
-    (o/prin-form expected-value)
+    (o/prin-color "expected:" :yellow)
+    (l/noten :o)
+    (o/prin-data expected-value)
     (l/noten :o)
     #
     (l/noten :o)
-    (o/prin-color "actual" :yellow)
-    (o/prin-form test-value :blue)
+    (o/prin-color "actual:" :yellow)
+    (l/noten :o)
+    (o/prin-data test-value :blue)
     (l/noten :o)))
 
 (defn o/report-std
@@ -510,12 +566,14 @@
     (l/noten :o content)))
 
 (defn o/report
-  [test-results out err]
+  [input test-results out err]
   (when (not (empty? (get test-results :fails)))
     (l/noten :o)
     (o/prin-sep)
     #
-    (o/report-fails test-results)
+    (def src (slurp input))
+    #
+    (o/report-fails src test-results)
     #
     (when (and out (pos? (length out)))
       (l/noten :o)
@@ -535,60 +593,192 @@
     (l/noten :o)))
 
 
+(comment import ./tests :prefix "")
+(comment import ./errors :prefix "")
+
 (comment import ./rewrite :prefix "")
 (comment import ./errors :prefix "")
 
 (comment import ./jipper :prefix "")
+(comment import ./helpers :prefix "")
+# based on code by corasaurus-hex
+
+# `slice` doesn't necessarily preserve the input type
+
+# XXX: differs from clojure's behavior
+#      e.g. (butlast [:a]) would yield nil(?!) in clojure
+(defn j/h/butlast
+  [indexed]
+  (if (empty? indexed)
+    nil
+    (if (tuple? indexed)
+      (tuple/slice indexed 0 -2)
+      (array/slice indexed 0 -2))))
+
+(comment
+
+  (j/h/butlast @[:a :b :c])
+  # =>
+  @[:a :b]
+
+  (j/h/butlast [:a])
+  # =>
+  []
+
+  )
+
+(defn j/h/rest
+  [indexed]
+  (if (empty? indexed)
+    nil
+    (if (tuple? indexed)
+      (tuple/slice indexed 1 -1)
+      (array/slice indexed 1 -1))))
+
+(comment
+
+  (j/h/rest [:a :b :c])
+  # =>
+  [:b :c]
+
+  (j/h/rest @[:a])
+  # =>
+  @[]
+
+  )
+
+# XXX: can pass in array - will get back tuple
+(defn j/h/tuple-push
+  [tup x & xs]
+  (if tup
+    [;tup x ;xs]
+    [x ;xs]))
+
+(comment
+
+  (j/h/tuple-push [:a :b] :c)
+  # =>
+  [:a :b :c]
+
+  (j/h/tuple-push nil :a)
+  # =>
+  [:a]
+
+  (j/h/tuple-push @[] :a)
+  # =>
+  [:a]
+
+  )
+
+(defn j/h/to-entries
+  [val]
+  (if (dictionary? val)
+    (pairs val)
+    val))
+
+(comment
+
+  (sort (j/h/to-entries {:a 1 :b 2}))
+  # =>
+  @[[:a 1] [:b 2]]
+
+  (j/h/to-entries {})
+  # =>
+  @[]
+
+  (j/h/to-entries @{:a 1})
+  # =>
+  @[[:a 1]]
+
+  # XXX: leaving non-dictionaries alone and passing through...
+  #      is this desirable over erroring?
+  (j/h/to-entries [:a :b :c])
+  # =>
+  [:a :b :c]
+
+  )
+
+# XXX: when xs is empty, "all" becomes nil
+(defn j/h/first-rest-maybe-all
+  [xs]
+  (if (or (nil? xs) (empty? xs))
+    [nil nil nil]
+    [(first xs) (j/h/rest xs) xs]))
+
+(comment
+
+  (j/h/first-rest-maybe-all [:a :b])
+  # =>
+  [:a [:b] [:a :b]]
+
+  (j/h/first-rest-maybe-all @[:a])
+  # =>
+  [:a @[] @[:a]]
+
+  (j/h/first-rest-maybe-all [])
+  # =>
+  [nil nil nil]
+
+  # XXX: is this what we want?
+  (j/h/first-rest-maybe-all nil)
+  # =>
+  [nil nil nil]
+
+  )
+
+
+(comment import ./locations :prefix "")
 # bl - begin line
 # bc - begin column
+# bp - begin position
 # el - end line
 # ec - end column
-(defn j/make-attrs
+# ep - end position
+(defn j/l/make-attrs
   [& items]
-  (zipcoll [:bl :bc :el :ec]
+  (zipcoll [:bl :bc :bp :el :ec :ep]
            items))
 
-(defn j/atom-node
+(defn j/l/atom-node
   [node-type peg-form]
-  ~(cmt (capture (sequence (line) (column)
+  ~(cmt (capture (sequence (line) (column) (position)
                            ,peg-form
-                           (line) (column)))
-        ,|[node-type (j/make-attrs ;(slice $& 0 -2)) (last $&)]))
+                           (line) (column) (position)))
+        ,|[node-type (j/l/make-attrs ;(slice $& 0 -2)) (last $&)]))
 
-(defn j/reader-macro-node
+(defn j/l/reader-macro-node
   [node-type sigil]
-  ~(cmt (capture (sequence (line) (column)
+  ~(cmt (capture (sequence (line) (column) (position)
                            ,sigil
                            (any :non-form)
                            :form
-                           (line) (column)))
-        ,|[node-type (j/make-attrs ;(slice $& 0 2) ;(slice $& -4 -2))
-           ;(slice $& 2 -4)]))
+                           (line) (column) (position)))
+        ,|[node-type (j/l/make-attrs ;(slice $& 0 3) ;(slice $& -5 -2))
+           ;(slice $& 3 -5)]))
 
-(defn j/collection-node
+(defn j/l/collection-node
   [node-type open-delim close-delim]
-  # to avoid issues when transforming this file
-  (def replace_ (symbol "replace"))
   ~(cmt
      (capture
        (sequence
-         (line) (column)
+         (line) (column) (position)
          ,open-delim
          (any :input)
          (choice ,close-delim
                  (error
-                   (,replace_ (sequence (line) (column))
-                              ,|(string/format
-                                  "line: %p column: %p missing %p for %p"
-                                  $0 $1 close-delim node-type))))
-         (line) (column)))
-     ,|[node-type (j/make-attrs ;(slice $& 0 2) ;(slice $& -4 -2))
-        ;(slice $& 2 -4)]))
+                   (replace (sequence (line) (column) (position))
+                            ,|(string/format
+                                (string "line: %p column: %p position: %p "
+                                        "missing %p for %p")
+                                $0 $1 $2 close-delim node-type))))
+         (line) (column) (position)))
+     ,|[node-type (j/l/make-attrs ;(slice $& 0 3) ;(slice $& -5 -2))
+        ;(slice $& 3 -5)]))
 
-(def j/loc-grammar
-  ~@{:main (sequence (line) (column)
+(def j/l/loc-grammar
+  ~@{:main (sequence (line) (column) (position)
                      (some :input)
-                     (line) (column))
+                     (line) (column) (position))
      #
      :input (choice :non-form
                     :form)
@@ -596,7 +786,7 @@
      :non-form (choice :whitespace
                        :comment)
      #
-     :whitespace ,(j/atom-node :whitespace
+     :whitespace ,(j/l/atom-node :whitespace
                              '(choice (some (set " \0\f\t\v"))
                                       (choice "\r\n"
                                               "\r"
@@ -610,7 +800,7 @@
      #                         (line) (column)))
      #      ,|[:whitespace (make-attrs ;(slice $& 0 -2)) (last $&)])
      #
-     :comment ,(j/atom-node :comment
+     :comment ,(j/l/atom-node :comment
                           '(sequence "#"
                                      (any (if-not (set "\r\n") 1))))
      #
@@ -637,7 +827,7 @@
                    :keyword
                    :symbol)
      #
-     :fn ,(j/reader-macro-node :fn "|")
+     :fn ,(j/l/reader-macro-node :fn "|")
      # :fn (cmt (capture (sequence (line) (column)
      #                             "|"
      #                             (any :non-form)
@@ -646,15 +836,15 @@
      #          ,|[:fn (make-attrs ;(slice $& 0 2) ;(slice $& -4 -2))
      #             ;(slice $& 2 -4)])
      #
-     :quasiquote ,(j/reader-macro-node :quasiquote "~")
+     :quasiquote ,(j/l/reader-macro-node :quasiquote "~")
      #
-     :quote ,(j/reader-macro-node :quote "'")
+     :quote ,(j/l/reader-macro-node :quote "'")
      #
-     :splice ,(j/reader-macro-node :splice ";")
+     :splice ,(j/l/reader-macro-node :splice ";")
      #
-     :unquote ,(j/reader-macro-node :unquote ",")
+     :unquote ,(j/l/reader-macro-node :unquote ",")
      #
-     :array ,(j/collection-node :array "@(" ")")
+     :array ,(j/l/collection-node :array "@(" ")")
      # :array
      # (cmt
      #   (capture
@@ -672,17 +862,17 @@
      #   ,|[:array (make-attrs ;(slice $& 0 2) ;(slice $& -4 -2))
      #      ;(slice $& 2 -4)])
      #
-     :tuple ,(j/collection-node :tuple "(" ")")
+     :tuple ,(j/l/collection-node :tuple "(" ")")
      #
-     :bracket-array ,(j/collection-node :bracket-array "@[" "]")
+     :bracket-array ,(j/l/collection-node :bracket-array "@[" "]")
      #
-     :bracket-tuple ,(j/collection-node :bracket-tuple "[" "]")
+     :bracket-tuple ,(j/l/collection-node :bracket-tuple "[" "]")
      #
-     :table ,(j/collection-node :table "@{" "}")
+     :table ,(j/l/collection-node :table "@{" "}")
      #
-     :struct ,(j/collection-node :struct "{" "}")
+     :struct ,(j/l/collection-node :struct "{" "}")
      #
-     :number ,(j/atom-node :number
+     :number ,(j/l/atom-node :number
                          ~(drop (sequence (cmt (capture (some :num-char))
                                                ,scan-number)
                                           (opt (sequence ":" (range "AZ" "az"))))))
@@ -690,14 +880,14 @@
      :num-char (choice (range "09" "AZ" "az")
                        (set "&+-._"))
      #
-     :constant ,(j/atom-node :constant
+     :constant ,(j/l/atom-node :constant
                            '(sequence (choice "false" "nil" "true")
                                       (not :name-char)))
      #
      :name-char (choice (range "09" "AZ" "az" "\x80\xFF")
                         (set "!$%&*+-./:<?=>@^_"))
      #
-     :buffer ,(j/atom-node :buffer
+     :buffer ,(j/l/atom-node :buffer
                          '(sequence `@"`
                                     (any (choice :escape
                                                  (if-not "\"" 1)))
@@ -710,13 +900,13 @@
                                (sequence "U" (6 :h))
                                (error (constant "bad escape"))))
      #
-     :string ,(j/atom-node :string
+     :string ,(j/l/atom-node :string
                          '(sequence `"`
                                     (any (choice :escape
                                                  (if-not "\"" 1)))
                                     `"`))
      #
-     :long-string ,(j/atom-node :long-string
+     :long-string ,(j/l/atom-node :long-string
                               :long-bytes)
      #
      :long-bytes {:main (drop (sequence :open
@@ -729,195 +919,175 @@
                                         (capture (backmatch :n)))
                               ,=)}
      #
-     :long-buffer ,(j/atom-node :long-buffer
+     :long-buffer ,(j/l/atom-node :long-buffer
                               '(sequence "@" :long-bytes))
      #
-     :keyword ,(j/atom-node :keyword
+     :keyword ,(j/l/atom-node :keyword
                           '(sequence ":"
                                      (any :name-char)))
      #
-     :symbol ,(j/atom-node :symbol
+     :symbol ,(j/l/atom-node :symbol
                          '(some :name-char))
      })
 
 (comment
 
-  (get (peg/match j/loc-grammar " ") 2)
+  (get (peg/match j/l/loc-grammar " ") 3)
   # =>
-  '(:whitespace @{:bc 1 :bl 1 :ec 2 :el 1} " ")
+  [:whitespace @{:bl 1 :el 1 :bc 1 :bp 0 :ec 2 :ep 1} " "]
 
-  (get (peg/match j/loc-grammar "true?") 2)
+  (get (peg/match j/l/loc-grammar "true?") 3)
   # =>
-  '(:symbol @{:bc 1 :bl 1 :ec 6 :el 1} "true?")
+  [:symbol @{:bl 1 :el 1 :bc 1 :bp 0 :ec 6 :ep 5} "true?"]
 
-  (get (peg/match j/loc-grammar "nil?") 2)
+  (get (peg/match j/l/loc-grammar "nil?") 3)
   # =>
-  '(:symbol @{:bc 1 :bl 1 :ec 5 :el 1} "nil?")
+  [:symbol @{:bl 1 :el 1 :bc 1 :bp 0 :ec 5 :ep 4} "nil?"]
 
-  (get (peg/match j/loc-grammar "false?") 2)
+  (get (peg/match j/l/loc-grammar "false?") 3)
   # =>
-  '(:symbol @{:bc 1 :bl 1 :ec 7 :el 1} "false?")
+  [:symbol @{:bl 1 :el 1 :bc 1 :bp 0 :ec 7 :ep 6} "false?"]
 
-  (get (peg/match j/loc-grammar "# hi there") 2)
+  (get (peg/match j/l/loc-grammar "# hi there") 3)
   # =>
-  '(:comment @{:bc 1 :bl 1 :ec 11 :el 1} "# hi there")
+  [:comment @{:bl 1 :el 1 :bc 1 :bp 0 :ec 11 :ep 10} "# hi there"]
 
-  (get (peg/match j/loc-grammar "1_000_000") 2)
+  (get (peg/match j/l/loc-grammar "1_000_000") 3)
   # =>
-  '(:number @{:bc 1 :bl 1 :ec 10 :el 1} "1_000_000")
+  [:number @{:bl 1 :el 1 :bc 1 :bp 0 :ec 10 :ep 9} "1_000_000"]
 
-  (get (peg/match j/loc-grammar "8.3") 2)
+  (get (peg/match j/l/loc-grammar "8.3") 3)
   # =>
-  '(:number @{:bc 1 :bl 1 :ec 4 :el 1} "8.3")
+  [:number @{:bl 1 :el 1 :bc 1 :bp 0 :ec 4 :ep 3} "8.3"]
 
-  (get (peg/match j/loc-grammar "1e2") 2)
+  (get (peg/match j/l/loc-grammar "1e2") 3)
   # =>
-  '(:number @{:bc 1 :bl 1 :ec 4 :el 1} "1e2")
+  [:number @{:bl 1 :el 1 :bc 1 :ep 3 :bp 0 :ec 4} "1e2"]
 
-  (get (peg/match j/loc-grammar "0xfe") 2)
+  (get (peg/match j/l/loc-grammar "0xfe") 3)
   # =>
-  '(:number @{:bc 1 :bl 1 :ec 5 :el 1} "0xfe")
+  [:number @{:bl 1 :el 1 :bc 1 :ep 4 :bp 0 :ec 5} "0xfe"]
 
-  (get (peg/match j/loc-grammar "2r01") 2)
+  (get (peg/match j/l/loc-grammar "2r01") 3)
   # =>
-  '(:number @{:bc 1 :bl 1 :ec 5 :el 1} "2r01")
+  [:number @{:bl 1 :el 1 :bc 1 :ep 4 :bp 0 :ec 5} "2r01"]
 
-  (get (peg/match j/loc-grammar "3r101&01") 2)
+  (get (peg/match j/l/loc-grammar "3r101&01") 3)
   # =>
-  '(:number @{:bc 1 :bl 1 :ec 9 :el 1} "3r101&01")
+  [:number @{:bl 1 :el 1 :bc 1 :ep 8 :bp 0 :ec 9} "3r101&01"]
 
-  (get (peg/match j/loc-grammar "2:u") 2)
+  (get (peg/match j/l/loc-grammar "2:u") 3)
   # =>
-  '(:number @{:bc 1 :bl 1 :ec 4 :el 1} "2:u")
+  [:number @{:bl 1 :el 1 :bc 1 :ep 3 :bp 0 :ec 4} "2:u"]
 
-  (get (peg/match j/loc-grammar "-8:s") 2)
+  (get (peg/match j/l/loc-grammar "-8:s") 3)
   # =>
-  '(:number @{:bc 1 :bl 1 :ec 5 :el 1} "-8:s")
+  [:number @{:bl 1 :el 1 :bc 1 :ep 4 :bp 0 :ec 5} "-8:s"]
 
-  (get (peg/match j/loc-grammar "1e2:n") 2)
+  (get (peg/match j/l/loc-grammar "1e2:n") 3)
   # =>
-  '(:number @{:bc 1 :bl 1 :ec 6 :el 1} "1e2:n")
+  [:number @{:bl 1 :el 1 :bc 1 :ep 5 :bp 0 :ec 6} "1e2:n"]
 
-  (get (peg/match j/loc-grammar "printf") 2)
+  (get (peg/match j/l/loc-grammar "printf") 3)
   # =>
-  '(:symbol @{:bc 1 :bl 1 :ec 7 :el 1} "printf")
+  [:symbol @{:bl 1 :el 1 :bc 1 :ep 6 :bp 0 :ec 7} "printf"]
 
-  (get (peg/match j/loc-grammar ":smile") 2)
+  (get (peg/match j/l/loc-grammar ":smile") 3)
   # =>
-  '(:keyword @{:bc 1 :bl 1 :ec 7 :el 1} ":smile")
+  [:keyword @{:bl 1 :el 1 :bc 1 :ep 6 :bp 0 :ec 7} ":smile"]
 
-  (get (peg/match j/loc-grammar `"fun"`) 2)
+  (get (peg/match j/l/loc-grammar `"fun"`) 3)
   # =>
-  '(:string @{:bc 1 :bl 1 :ec 6 :el 1} "\"fun\"")
+  [:string @{:bl 1 :el 1 :bc 1 :ep 5 :bp 0 :ec 6} "\"fun\""]
 
-  (get (peg/match j/loc-grammar "``long-fun``") 2)
+  (get (peg/match j/l/loc-grammar "``long-fun``") 3)
   # =>
-  '(:long-string @{:bc 1 :bl 1 :ec 13 :el 1} "``long-fun``")
+  [:long-string @{:bl 1 :el 1 :bc 1 :ep 12 :bp 0 :ec 13} "``long-fun``"]
 
-  (get (peg/match j/loc-grammar "@``long-buffer-fun``") 2)
+  (get (peg/match j/l/loc-grammar "@``long-buffer-fun``") 3)
   # =>
-  '(:long-buffer @{:bc 1 :bl 1 :ec 21 :el 1} "@``long-buffer-fun``")
+  [:long-buffer
+   @{:bl 1 :el 1 :bc 1 :bp 0 :ec 21 :ep 20}
+   "@``long-buffer-fun``"]
 
-  (get (peg/match j/loc-grammar `@"a buffer"`) 2)
+  (get (peg/match j/l/loc-grammar `@"a buffer"`) 3)
   # =>
-  '(:buffer @{:bc 1 :bl 1 :ec 12 :el 1} "@\"a buffer\"")
+  [:buffer @{:bl 1 :el 1 :bc 1 :ep 11 :bp 0 :ec 12} "@\"a buffer\""]
 
-  (get (peg/match j/loc-grammar "@[8]") 2)
+  (get (peg/match j/l/loc-grammar "@[8]") 3)
   # =>
-  '(:bracket-array @{:bc 1 :bl 1
-                     :ec 5 :el 1}
-                   (:number @{:bc 3 :bl 1
-                              :ec 4 :el 1} "8"))
+  [:bracket-array @{:bl 1 :el 1 :bc 1 :ep 4 :bp 0 :ec 5}
+   [:number @{:bl 1 :el 1 :bc 3 :ep 3 :bp 2 :ec 4} "8"]]
 
-  (get (peg/match j/loc-grammar "@{:a 1}") 2)
+  (get (peg/match j/l/loc-grammar "@{:a 1}") 3)
   # =>
-  '(:table @{:bc 1 :bl 1
-             :ec 8 :el 1}
-           (:keyword @{:bc 3 :bl 1
-                       :ec 5 :el 1} ":a")
-           (:whitespace @{:bc 5 :bl 1
-                          :ec 6 :el 1} " ")
-           (:number @{:bc 6 :bl 1
-                      :ec 7 :el 1} "1"))
+  [:table @{:bl 1 :el 1 :bc 1 :ep 7 :bp 0 :ec 8}
+   [:keyword @{:bl 1 :el 1 :bc 3 :ep 4 :bp 2 :ec 5} ":a"]
+   [:whitespace @{:bl 1 :el 1 :bc 5 :ep 5 :bp 4 :ec 6} " "]
+   [:number @{:bl 1 :el 1 :bc 6 :ep 6 :bp 5 :ec 7} "1"]]
 
-  (get (peg/match j/loc-grammar "~x") 2)
+  (get (peg/match j/l/loc-grammar "~x") 3)
   # =>
-  '(:quasiquote @{:bc 1 :bl 1
-                  :ec 3 :el 1}
-                (:symbol @{:bc 2 :bl 1
-                           :ec 3 :el 1} "x"))
+  [:quasiquote @{:bl 1 :el 1 :bc 1 :ep 2 :bp 0 :ec 3}
+   [:symbol @{:bl 1 :el 1 :bc 2 :ep 2 :bp 1 :ec 3} "x"]]
 
-  (get (peg/match j/loc-grammar "' '[:a :b]") 2)
+  (get (peg/match j/l/loc-grammar "' '[:a :b]") 3)
   # =>
-  '(:quote @{:bc 1 :bl 1
-             :ec 11 :el 1}
-           (:whitespace @{:bc 2 :bl 1
-                          :ec 3 :el 1} " ")
-           (:quote @{:bc 3 :bl 1
-                     :ec 11 :el 1}
-                   (:bracket-tuple @{:bc 4 :bl 1
-                                     :ec 11 :el 1}
-                                   (:keyword @{:bc 5 :bl 1
-                                               :ec 7 :el 1} ":a")
-                                   (:whitespace @{:bc 7 :bl 1
-                                                  :ec 8 :el 1} " ")
-                                   (:keyword @{:bc 8 :bl 1
-                                               :ec 10 :el 1} ":b"))))
+  [:quote @{:bl 1 :el 1 :bc 1 :ep 10 :bp 0 :ec 11}
+   [:whitespace @{:bl 1 :el 1 :bc 2 :ep 2 :bp 1 :ec 3} " "]
+   [:quote @{:bl 1 :el 1 :bc 3 :ep 10 :bp 2 :ec 11}
+    [:bracket-tuple @{:bl 1 :el 1 :bc 4 :ep 10 :bp 3 :ec 11}
+     [:keyword @{:bl 1 :el 1 :bc 5 :ep 6 :bp 4 :ec 7} ":a"]
+     [:whitespace @{:bl 1 :el 1 :bc 7 :ep 7 :bp 6 :ec 8} " "]
+     [:keyword @{:bl 1 :el 1 :bc 8 :ep 9 :bp 7 :ec 10} ":b"]]]]
 
   )
 
-(def j/loc-top-level-ast
-  (put (table ;(kvs j/loc-grammar))
-       :main ~(sequence (line) (column)
+(def j/l/loc-top-level-ast
+  (put (table ;(kvs j/l/loc-grammar))
+       :main ~(sequence (line) (column) (position)
                         :input
-                        (line) (column))))
+                        (line) (column) (position))))
 
-(defn j/par
+(defn j/l/par
   [src &opt start single]
   (default start 0)
   (if single
-    (if-let [[bl bc tree el ec]
-             (peg/match j/loc-top-level-ast src start)]
-      @[:code (j/make-attrs bl bc el ec) tree]
+    (if-let [[bl bc bp tree el ec ep]
+             (peg/match j/l/loc-top-level-ast src start)]
+      @[:code (j/l/make-attrs bl bc bp el ec ep) tree]
       @[:code])
-    (if-let [captures (peg/match j/loc-grammar src start)]
-      (let [[bl bc] (slice captures 0 2)
-            [el ec] (slice captures -3)
-            trees (array/slice captures 2 -3)]
+    (if-let [captures (peg/match j/l/loc-grammar src start)]
+      (let [[bl bc bp] (slice captures 0 3)
+            [el ec ep] (slice captures -4)
+            trees (array/slice captures 3 -4)]
         (array/insert trees 0
-                      :code (j/make-attrs bl bc el ec)))
+                      :code (j/l/make-attrs bl bc bp el ec ep)))
       @[:code])))
 
 # XXX: backward compatibility
-(def j/ast j/par)
+(def j/l/ast j/l/par)
 
 (comment
 
-  (j/par "(+ 1 1)")
+  (j/l/par "(+ 1 1)")
   # =>
-  '@[:code @{:bc 1 :bl 1
-             :ec 8 :el 1}
-     (:tuple @{:bc 1 :bl 1
-               :ec 8 :el 1}
-             (:symbol @{:bc 2 :bl 1
-                        :ec 3 :el 1} "+")
-             (:whitespace @{:bc 3 :bl 1
-                            :ec 4 :el 1} " ")
-             (:number @{:bc 4 :bl 1
-                        :ec 5 :el 1} "1")
-             (:whitespace @{:bc 5 :bl 1
-                            :ec 6 :el 1} " ")
-             (:number @{:bc 6 :bl 1
-                        :ec 7 :el 1} "1"))]
+  @[:code @{:bl 1 :el 1 :bc 1 :ep 7 :bp 0 :ec 8}
+    [:tuple @{:bl 1 :el 1 :bc 1 :ep 7 :bp 0 :ec 8}
+     [:symbol @{:bl 1 :el 1 :bc 2 :ep 2 :bp 1 :ec 3} "+"]
+     [:whitespace @{:bl 1 :el 1 :bc 3 :ep 3 :bp 2 :ec 4} " "]
+     [:number @{:bl 1 :el 1 :bc 4 :ep 4 :bp 3 :ec 5} "1"]
+     [:whitespace @{:bl 1 :el 1 :bc 5 :ep 5 :bp 4 :ec 6} " "]
+     [:number @{:bl 1 :el 1 :bc 6 :ep 6 :bp 5 :ec 7} "1"]]]
 
   )
 
-(defn j/gen*
+(defn j/l/gen*
   [an-ast buf]
   (case (first an-ast)
     :code
     (each elt (drop 2 an-ast)
-      (j/gen* elt buf))
+      (j/l/gen* elt buf))
     #
     :buffer
     (buffer/push-string buf (in an-ast 2))
@@ -944,110 +1114,106 @@
     (do
       (buffer/push-string buf "@(")
       (each elt (drop 2 an-ast)
-        (j/gen* elt buf))
+        (j/l/gen* elt buf))
       (buffer/push-string buf ")"))
     :bracket-array
     (do
       (buffer/push-string buf "@[")
       (each elt (drop 2 an-ast)
-        (j/gen* elt buf))
+        (j/l/gen* elt buf))
       (buffer/push-string buf "]"))
     :bracket-tuple
     (do
       (buffer/push-string buf "[")
       (each elt (drop 2 an-ast)
-        (j/gen* elt buf))
+        (j/l/gen* elt buf))
       (buffer/push-string buf "]"))
     :tuple
     (do
       (buffer/push-string buf "(")
       (each elt (drop 2 an-ast)
-        (j/gen* elt buf))
+        (j/l/gen* elt buf))
       (buffer/push-string buf ")"))
     :struct
     (do
       (buffer/push-string buf "{")
       (each elt (drop 2 an-ast)
-        (j/gen* elt buf))
+        (j/l/gen* elt buf))
       (buffer/push-string buf "}"))
     :table
     (do
       (buffer/push-string buf "@{")
       (each elt (drop 2 an-ast)
-        (j/gen* elt buf))
+        (j/l/gen* elt buf))
       (buffer/push-string buf "}"))
     #
     :fn
     (do
       (buffer/push-string buf "|")
       (each elt (drop 2 an-ast)
-        (j/gen* elt buf)))
+        (j/l/gen* elt buf)))
     :quasiquote
     (do
       (buffer/push-string buf "~")
       (each elt (drop 2 an-ast)
-        (j/gen* elt buf)))
+        (j/l/gen* elt buf)))
     :quote
     (do
       (buffer/push-string buf "'")
       (each elt (drop 2 an-ast)
-        (j/gen* elt buf)))
+        (j/l/gen* elt buf)))
     :splice
     (do
       (buffer/push-string buf ";")
       (each elt (drop 2 an-ast)
-        (j/gen* elt buf)))
+        (j/l/gen* elt buf)))
     :unquote
     (do
       (buffer/push-string buf ",")
       (each elt (drop 2 an-ast)
-        (j/gen* elt buf)))
+        (j/l/gen* elt buf)))
     ))
 
-(defn j/gen
+(defn j/l/gen
   [an-ast]
   (let [buf @""]
-    (j/gen* an-ast buf)
+    (j/l/gen* an-ast buf)
     # XXX: leave as buffer?
     (string buf)))
 
 # XXX: backward compatibility
-(def j/code j/gen)
+(def j/l/code j/l/gen)
 
 (comment
 
-  (j/gen
-    [:code])
+  (j/l/gen [:code])
   # =>
   ""
 
-  (j/gen
-    '(:whitespace @{:bc 1 :bl 1
-                    :ec 2 :el 1} " "))
+  (j/l/gen [:whitespace @{:bc 1 :bl 1 :bp 0
+                      :ec 2 :el 1 :ep 1} " "])
   # =>
   " "
 
-  (j/gen
-    '(:buffer @{:bc 1 :bl 1
-                :ec 12 :el 1} "@\"a buffer\""))
+  (j/l/gen [:buffer @{:bc 1 :bl 1 :bp 0
+                  :ec 12 :el 1 :ep 11} "@\"a buffer\""])
   # =>
   `@"a buffer"`
 
-  (j/gen
-    '@[:code @{:bc 1 :bl 1
-               :ec 8 :el 1}
-       (:tuple @{:bc 1 :bl 1
-                 :ec 8 :el 1}
-               (:symbol @{:bc 2 :bl 1
-                          :ec 3 :el 1} "+")
-               (:whitespace @{:bc 3 :bl 1
-                              :ec 4 :el 1} " ")
-               (:number @{:bc 4 :bl 1
-                          :ec 5 :el 1} "1")
-               (:whitespace @{:bc 5 :bl 1
-                              :ec 6 :el 1} " ")
-               (:number @{:bc 6 :bl 1
-                          :ec 7 :el 1} "1"))])
+  (j/l/gen @[:code @{:bc 1 :bl 1 :bp 0
+                 :ec 8 :el 1 :ep 7}
+         [:tuple @{:bc 1 :bl 1 :bp 0
+                   :ec 8 :el 1 :ep 7}
+                 [:symbol @{:bc 2 :bl 1 :bp 1
+                            :ec 3 :el 1 :ep 2} "+"]
+                 [:whitespace @{:bc 3 :bl 1 :bp 2
+                                :ec 4 :el 1 :ep 3} " "]
+                 [:number @{:bc 4 :bl 1 :bp 3
+                            :ec 5 :el 1 :ep 4} "1"]
+                 [:whitespace @{:bc 5 :bl 1 :bp 4
+                                :ec 6 :el 1 :ep 5} " "]
+                 [:number @{:bc 6 :bl 1 :bp 5
+                            :ec 7 :el 1 :ep 6} "1"]]])
   # =>
   "(+ 1 1)"
 
@@ -1057,7 +1223,7 @@
 
   (def src "{:x  :y \n :z  [:a  :b    :c]}")
 
-  (j/gen (j/par src))
+  (j/l/gen (j/l/par src))
   # =>
   src
 
@@ -1070,138 +1236,18 @@
     (let [src (slurp (string (os/getenv "HOME")
                              "/src/janet/src/boot/boot.janet"))]
       (= (string src)
-         (j/gen (j/par src))))
+         (j/l/gen (j/l/par src))))
 
     )
 
   )
 
-########################################################################
 
-# based on code by corasaurus-hex
+(def j/version "2026-03-20_08-37-15")
 
-# `slice` doesn't necessarily preserve the input type
-
-# XXX: differs from clojure's behavior
-#      e.g. (butlast [:a]) would yield nil(?!) in clojure
-(defn j/butlast
-  [indexed]
-  (if (empty? indexed)
-    nil
-    (if (tuple? indexed)
-      (tuple/slice indexed 0 -2)
-      (array/slice indexed 0 -2))))
-
-(comment
-
-  (j/butlast @[:a :b :c])
-  # =>
-  @[:a :b]
-
-  (j/butlast [:a])
-  # =>
-  []
-
-  )
-
-(defn j/rest
-  [indexed]
-  (if (empty? indexed)
-    nil
-    (if (tuple? indexed)
-      (tuple/slice indexed 1 -1)
-      (array/slice indexed 1 -1))))
-
-(comment
-
-  (j/rest [:a :b :c])
-  # =>
-  [:b :c]
-
-  (j/rest @[:a])
-  # =>
-  @[]
-
-  )
-
-# XXX: can pass in array - will get back tuple
-(defn j/tuple-push
-  [tup x & xs]
-  (if tup
-    [;tup x ;xs]
-    [x ;xs]))
-
-(comment
-
-  (j/tuple-push [:a :b] :c)
-  # =>
-  [:a :b :c]
-
-  (j/tuple-push nil :a)
-  # =>
-  [:a]
-
-  (j/tuple-push @[] :a)
-  # =>
-  [:a]
-
-  )
-
-(defn j/to-entries
-  [val]
-  (if (dictionary? val)
-    (pairs val)
-    val))
-
-(comment
-
-  (sort (j/to-entries {:a 1 :b 2}))
-  # =>
-  @[[:a 1] [:b 2]]
-
-  (j/to-entries {})
-  # =>
-  @[]
-
-  (j/to-entries @{:a 1})
-  # =>
-  @[[:a 1]]
-
-  # XXX: leaving non-dictionaries alone and passing through...
-  #      is this desirable over erroring?
-  (j/to-entries [:a :b :c])
-  # =>
-  [:a :b :c]
-
-  )
-
-# XXX: when xs is empty, "all" becomes nil
-(defn j/first-rest-maybe-all
-  [xs]
-  (if (or (nil? xs) (empty? xs))
-    [nil nil nil]
-    [(first xs) (j/rest xs) xs]))
-
-(comment
-
-  (j/first-rest-maybe-all [:a :b])
-  # =>
-  [:a [:b] [:a :b]]
-
-  (j/first-rest-maybe-all @[:a])
-  # =>
-  [:a @[] @[:a]]
-
-  (j/first-rest-maybe-all [])
-  # =>
-  [nil nil nil]
-
-  # XXX: is this what we want?
-  (j/first-rest-maybe-all nil)
-  # =>
-  [nil nil nil]
-
-  )
+# exports
+(def j/par j/l/par)
+(def j/gen j/l/gen)
 
 ########################################################################
 
@@ -1247,17 +1293,16 @@
 
   )
 
-# ds - data structure
-(defn j/ds-zip
+(defn j/indexed-zip
   ``
-  Returns a zipper for nested data structures (tuple/array/table/struct),
-  given a root data structure.
+  Returns a zipper for nested indexed data structures (tuples
+  or arrays), given a root data structure.
   ``
-  [ds]
-  (j/zipper ds
-          |(or (dictionary? $) (indexed? $))
-          j/to-entries
-          (fn [p xs] xs)))
+  [indexed]
+  (j/zipper indexed
+          indexed?
+          j/h/to-entries
+          (fn [_p xs] xs)))
 
 (comment
 
@@ -1265,7 +1310,7 @@
     [:x [:y :z]])
 
   (def [the-node the-state]
-    (j/ds-zip a-node))
+    (j/indexed-zip a-node))
 
   the-node
   # =>
@@ -1285,7 +1330,7 @@
 
 (comment
 
-  (j/node (j/ds-zip [:a :b [:x :y]]))
+  (j/node (j/indexed-zip [:a :b [:x :y]]))
   # =>
   [:a :b [:x :y]]
 
@@ -1300,7 +1345,7 @@
 
   # merge is used to "remove" the prototype table of `st`
   (merge {}
-         (-> (j/ds-zip [:a [:b [:x :y]]])
+         (-> (j/indexed-zip [:a [:b [:x :y]]])
              j/state))
   # =>
   @{}
@@ -1317,7 +1362,7 @@
 
 (comment
 
-  (j/branch? (j/ds-zip [:a :b [:x :y]]))
+  (j/branch? (j/indexed-zip [:a :b [:x :y]]))
   # =>
   true
 
@@ -1335,7 +1380,7 @@
 
 (comment
 
-  (j/children (j/ds-zip [:a :b [:x :y]]))
+  (j/children (j/indexed-zip [:a :b [:x :y]]))
   # =>
   [:a :b [:x :y]]
 
@@ -1352,7 +1397,7 @@
 
   # merge is used to "remove" the prototype table of `st`
   (merge {}
-         (j/make-state (j/ds-zip [:a :b [:x :y]])))
+         (j/make-state (j/indexed-zip [:a :b [:x :y]])))
   # =>
   @{}
 
@@ -1367,32 +1412,32 @@
   (when (j/branch? zloc)
     (let [[z-node st] zloc
           [k rest-kids kids]
-          (j/first-rest-maybe-all (j/children zloc))]
+          (j/h/first-rest-maybe-all (j/children zloc))]
       (when kids
         [k
          (j/make-state zloc
                      []
                      rest-kids
                      (if (not (empty? st))
-                       (j/tuple-push (get st :pnodes) z-node)
+                       (j/h/tuple-push (get st :pnodes) z-node)
                        [z-node])
                      st
                      (get st :changed?))]))))
 
 (comment
 
-  (j/node (j/down (j/ds-zip [:a :b [:x :y]])))
+  (j/node (j/down (j/indexed-zip [:a :b [:x :y]])))
   # =>
   :a
 
-  (-> (j/ds-zip [:a :b [:x :y]])
+  (-> (j/indexed-zip [:a :b [:x :y]])
       j/down
       j/branch?)
   # =>
   false
 
   (try
-    (-> (j/ds-zip [:a])
+    (-> (j/indexed-zip [:a])
         j/down
         j/children)
     ([e] e))
@@ -1403,7 +1448,7 @@
     #
     (merge {}
            (-> [:a [:b [:x :y]]]
-               j/ds-zip
+               j/indexed-zip
                j/down
                j/state))
     #
@@ -1424,11 +1469,11 @@
   [zloc]
   (let [[z-node st] zloc
         {:ls ls :rs rs} st
-        [r rest-rs rs] (j/first-rest-maybe-all rs)]
-    (when (and (not (empty? st)) rs)
+        [r rest-rs rs_] (j/h/first-rest-maybe-all rs)]
+    (when (and (not (empty? st)) rs_)
       [r
        (j/make-state zloc
-                   (j/tuple-push ls z-node)
+                   (j/h/tuple-push ls z-node)
                    rest-rs
                    (get st :pnodes)
                    (get st :pstate)
@@ -1436,14 +1481,14 @@
 
 (comment
 
-  (-> (j/ds-zip [:a :b])
+  (-> (j/indexed-zip [:a :b])
       j/down
       j/right
       j/node)
   # =>
   :b
 
-  (-> (j/ds-zip [:a])
+  (-> (j/indexed-zip [:a])
       j/down
       j/right)
   # =>
@@ -1460,7 +1505,7 @@
 
 (comment
 
-  (j/make-node (j/ds-zip [:a :b [:x :y]])
+  (j/make-node (j/indexed-zip [:a :b [:x :y]])
              [:a :b] [:x :y])
   # =>
   [:x :y]
@@ -1494,7 +1539,7 @@
 (comment
 
   (def m-zip
-    (j/ds-zip [:a :b [:x :y]]))
+    (j/indexed-zip [:a :b [:x :y]]))
 
   (deep=
     (-> m-zip
@@ -1539,7 +1584,7 @@
 (comment
 
   (def a-zip
-    (j/ds-zip [:a :b [:x :y]]))
+    (j/indexed-zip [:a :b [:x :y]]))
 
   (j/node a-zip)
   # =>
@@ -1576,7 +1621,7 @@
 (comment
 
   (def a-zip
-    (j/ds-zip [:a :b [:x]]))
+    (j/indexed-zip [:a :b [:x]]))
 
   (j/node (j/df-next a-zip))
   # =>
@@ -1615,14 +1660,14 @@
 
 (comment
 
-  (-> (j/ds-zip [:a :b [:x :y]])
+  (-> (j/indexed-zip [:a :b [:x :y]])
       j/down
       (j/replace :w)
       j/root)
   # =>
   [:w :b [:x :y]]
 
-  (-> (j/ds-zip [:a :b [:x :y]])
+  (-> (j/indexed-zip [:a :b [:x :y]])
       j/down
       j/right
       j/right
@@ -1645,14 +1690,14 @@
 
 (comment
 
-  (-> (j/ds-zip [1 2 [8 9]])
+  (-> (j/indexed-zip [1 2 [8 9]])
       j/down
       (j/edit inc)
       j/root)
   # =>
   [2 2 [8 9]]
 
-  (-> (j/ds-zip [1 2 [8 9]])
+  (-> (j/indexed-zip [1 2 [8 9]])
       j/down
       (j/edit inc)
       j/right
@@ -1681,7 +1726,7 @@
 
 (comment
 
-  (-> (j/ds-zip [:a :b [:x :y]])
+  (-> (j/indexed-zip [:a :b [:x :y]])
       (j/insert-child :c)
       j/root)
   # =>
@@ -1702,7 +1747,7 @@
 
 (comment
 
-  (-> (j/ds-zip [:a :b [:x :y]])
+  (-> (j/indexed-zip [:a :b [:x :y]])
       (j/append-child :c)
       j/root)
   # =>
@@ -1724,7 +1769,7 @@
              (not (empty? rs)))
       [(last rs)
        (j/make-state zloc
-                   (j/tuple-push ls z-node ;(j/butlast rs))
+                   (j/h/tuple-push ls z-node ;(j/h/butlast rs))
                    []
                    (get st :pnodes)
                    (get st :pstate)
@@ -1733,7 +1778,7 @@
 
 (comment
 
-  (-> (j/ds-zip [:a :b [:x :y]])
+  (-> (j/indexed-zip [:a :b [:x :y]])
       j/down
       j/rightmost
       j/node)
@@ -1745,11 +1790,11 @@
 (defn j/remove
   ``
   Removes the node at `zloc`, returning the z-location that would have
-  preceded it in a depth-first walk.
-  Throws an error if called at the root z-location.
+  preceded it in a depth-first walk.  Throws an error if called at the
+  root z-location.
   ``
   [zloc]
-  (let [[z-node st] zloc
+  (let [[_z-node st] zloc
         {:ls ls
          :pnodes pnodes
          :pstate pstate
@@ -1765,7 +1810,7 @@
       (if (pos? (length ls))
         (recur [(last ls)
                 (j/make-state zloc
-                            (j/butlast ls)
+                            (j/h/butlast ls)
                             rs
                             pnodes
                             pstate
@@ -1781,7 +1826,7 @@
 
 (comment
 
-  (-> (j/ds-zip [:a :b [:x :y]])
+  (-> (j/indexed-zip [:a :b [:x :y]])
       j/down
       j/right
       j/remove
@@ -1790,7 +1835,7 @@
   :a
 
   (try
-    (j/remove (j/ds-zip [:a :b [:x :y]]))
+    (j/remove (j/indexed-zip [:a :b [:x :y]]))
     ([e] e))
   # =>
   "Called `remove` at root"
@@ -1810,7 +1855,7 @@
                (not (empty? ls)))
       [(last ls)
        (j/make-state zloc
-                   (j/butlast ls)
+                   (j/h/butlast ls)
                    [z-node ;rs]
                    (get st :pnodes)
                    (get st :pstate)
@@ -1818,7 +1863,7 @@
 
 (comment
 
-  (-> (j/ds-zip [:a :b :c])
+  (-> (j/indexed-zip [:a :b :c])
       j/down
       j/right
       j/right
@@ -1827,7 +1872,7 @@
   # =>
   :b
 
-  (-> (j/ds-zip [:a])
+  (-> (j/indexed-zip [:a])
       j/down
       j/left)
   # =>
@@ -1855,7 +1900,7 @@
 
 (comment
 
-  (-> (j/ds-zip [:a :b [:x :y]])
+  (-> (j/indexed-zip [:a :b [:x :y]])
       j/down
       j/right
       j/df-prev
@@ -1863,7 +1908,7 @@
   # =>
   :a
 
-  (-> (j/ds-zip [:a :b [:x :y]])
+  (-> (j/indexed-zip [:a :b [:x :y]])
       j/down
       j/right
       j/right
@@ -1896,7 +1941,7 @@
 (comment
 
   (def a-zip
-    (j/ds-zip [:a :b [:x :y]]))
+    (j/indexed-zip [:a :b [:x :y]]))
 
   (-> a-zip
       j/down
@@ -1924,7 +1969,7 @@
     (if (not (empty? st))
       [z-node
        (j/make-state zloc
-                   (j/tuple-push ls a-node)
+                   (j/h/tuple-push ls a-node)
                    rs
                    (get st :pnodes)
                    (get st :pstate)
@@ -1934,7 +1979,7 @@
 (comment
 
   (def a-zip
-    (j/ds-zip [:a :b [:x :y]]))
+    (j/indexed-zip [:a :b [:x :y]]))
 
   (-> a-zip
       j/down
@@ -1959,11 +2004,18 @@
 
 (comment
 
-  (-> (j/ds-zip [:a :b [:x :y]])
+  (-> (j/indexed-zip [:a :b [:x :y]])
       j/down
       j/rights)
   # =>
   [:b [:x :y]]
+
+  (-> (j/indexed-zip [:a :b])
+      j/down
+      j/right
+      j/rights)
+  # =>
+  []
 
   )
 
@@ -1977,13 +2029,13 @@
 
 (comment
 
-  (-> (j/ds-zip [:a :b])
+  (-> (j/indexed-zip [:a :b])
       j/down
       j/lefts)
   # =>
   []
 
-  (-> (j/ds-zip [:a :b [:x :y]])
+  (-> (j/indexed-zip [:a :b [:x :y]])
       j/down
       j/right
       j/right
@@ -2007,7 +2059,7 @@
       [(first ls)
        (j/make-state zloc
                    []
-                   [;(j/rest ls) z-node ;rs]
+                   [;(j/h/rest ls) z-node ;rs]
                    (get st :pnodes)
                    (get st :pstate)
                    (get st :changed?))]
@@ -2015,14 +2067,14 @@
 
 (comment
 
-  (-> (j/ds-zip [:a :b [:x :y]])
+  (-> (j/indexed-zip [:a :b [:x :y]])
       j/down
       j/leftmost
       j/node)
   # =>
   :a
 
-  (-> (j/ds-zip [:a :b [:x :y]])
+  (-> (j/indexed-zip [:a :b [:x :y]])
       j/down
       j/rightmost
       j/leftmost
@@ -2040,17 +2092,17 @@
 
 (comment
 
-  (j/path (j/ds-zip [:a :b [:x :y]]))
+  (j/path (j/indexed-zip [:a :b [:x :y]]))
   # =>
   nil
 
-  (-> (j/ds-zip [:a :b [:x :y]])
+  (-> (j/indexed-zip [:a :b [:x :y]])
       j/down
       j/path)
   # =>
   [[:a :b [:x :y]]]
 
-  (-> (j/ds-zip [:a :b [:x :y]])
+  (-> (j/indexed-zip [:a :b [:x :y]])
       j/down
       j/right
       j/right
@@ -2082,7 +2134,7 @@
         [:symbol "+"] [:whitespace " "]
         [:number "1"] [:whitespace " "]
         [:number "2"]]]
-      j/ds-zip
+      j/indexed-zip
       j/down
       j/right
       j/down
@@ -2121,7 +2173,7 @@
         [:symbol "+"] [:whitespace " "]
         [:number "1"] [:whitespace " "]
         [:number "2"]]]
-      j/ds-zip
+      j/indexed-zip
       j/down
       j/right
       j/down
@@ -2157,7 +2209,7 @@
 
 (comment
 
-  (-> (j/ds-zip [:a :b :c])
+  (-> (j/indexed-zip [:a :b :c])
       j/down
       (j/search-from |(match (j/node $)
                       :b
@@ -2166,7 +2218,7 @@
   # =>
   :b
 
-  (-> (j/ds-zip [:a :b :c])
+  (-> (j/indexed-zip [:a :b :c])
       j/down
       (j/search-from |(match (j/node $)
                       :d
@@ -2174,7 +2226,7 @@
   # =>
   nil
 
-  (-> (j/ds-zip [:a :b :c])
+  (-> (j/indexed-zip [:a :b :c])
       j/down
       (j/search-from |(match (j/node $)
                       :a
@@ -2202,7 +2254,7 @@
 
 (comment
 
-  (-> (j/ds-zip [:b :a :b])
+  (-> (j/indexed-zip [:b :a :b])
       j/down
       (j/search-after |(match (j/node $)
                        :b
@@ -2212,7 +2264,7 @@
   # =>
   :a
 
-  (-> (j/ds-zip [:b :a :b])
+  (-> (j/indexed-zip [:b :a :b])
       j/down
       (j/search-after |(match (j/node $)
                        :d
@@ -2220,7 +2272,7 @@
   # =>
   nil
 
-  (-> (j/ds-zip [:a [:b :c [2 [3 :smile] 5]]])
+  (-> (j/indexed-zip [:a [:b :c [2 [3 :smile] 5]]])
       (j/search-after |(match (j/node $)
                        [_ :smile]
                        true))
@@ -2261,7 +2313,7 @@
 
 (comment
 
-  (-> (j/ds-zip [:a :b [:x :y]])
+  (-> (j/indexed-zip [:a :b [:x :y]])
       j/down
       j/right
       j/right
@@ -2270,21 +2322,21 @@
   # =>
   [:a :b :x :y]
 
-  (-> (j/ds-zip [:a :b [:x :y]])
+  (-> (j/indexed-zip [:a :b [:x :y]])
       j/down
       j/unwrap
       j/root)
   # =>
   [:a :b [:x :y]]
 
-  (-> (j/ds-zip [[:a]])
+  (-> (j/indexed-zip [[:a]])
       j/down
       j/unwrap
       j/root)
   # =>
   [:a]
 
-  (-> (j/ds-zip [[:a :b] [:x :y]])
+  (-> (j/indexed-zip [[:a :b] [:x :y]])
       j/down
       j/down
       j/remove
@@ -2294,11 +2346,35 @@
   [:b [:x :y]]
 
   (try
-    (-> (j/ds-zip [:a :b [:x :y]])
+    (-> (j/indexed-zip [:a :b [:x :y]])
         j/unwrap)
     ([e] e))
   # =>
   "Called `unwrap` at root"
+
+  )
+
+(defn j/eq?
+  ``
+  Compare two zlocs, `a-zloc` and `b-zloc`, for equality.
+  ``
+  [a-zloc b-zloc]
+  (and (= (length (j/lefts a-zloc)) (length (j/lefts b-zloc)))
+       (= (j/path a-zloc) (j/path b-zloc))))
+
+(comment
+
+  (def iz (j/indexed-zip [:a :b :c :b]))
+
+  (j/eq? (-> iz j/down j/right)
+       (-> iz j/down j/right j/right j/right))
+  # =>
+  false
+
+  (j/eq? (-> iz j/down j/right)
+       (-> iz j/down j/right j/right j/right j/left j/left))
+  # =>
+  true
 
   )
 
@@ -2322,9 +2398,7 @@
   (def kids @[])
   (var cur-zloc start-zloc)
   (while (and cur-zloc
-              # XXX: expensive?
-              (not (deep= (j/node cur-zloc)
-                          (j/node end-zloc)))) # left to right
+              (not (j/eq? cur-zloc end-zloc))) # left to right
     (array/push kids (j/node cur-zloc))
     (set cur-zloc (j/right cur-zloc)))
   (when (nil? cur-zloc)
@@ -2341,7 +2415,7 @@
   # because the desired exiting condition for the while loop depends
   # on cur-zloc becoming end-zloc -- if `replace` were to be used
   # there, the termination condition never gets fulfilled properly.
-  (for i 0 (dec (length kids)) # left to right again
+  (repeat (dec (length kids)) # left to right again
     (set cur-zloc
          (-> (j/replace cur-zloc dummy-node)
              j/right)))
@@ -2352,7 +2426,7 @@
   #
   (def new-node
     (j/make-node start-zloc wrap-node (tuple ;kids)))
-  (for i 0 (dec (length kids)) # right to left
+  (repeat (dec (length kids)) # right to left
     (set cur-zloc
          (j/remove cur-zloc)))
   # 4. put the new container node into place
@@ -2361,7 +2435,7 @@
 (comment
 
   (def start-zloc
-    (-> (j/ds-zip [:a [:b] :c :x])
+    (-> (j/indexed-zip [:a [:b] :c :x])
         j/down
         j/right))
 
@@ -2481,7 +2555,7 @@
   ``
   Return the attributes table for the node of a z-location.  The
   attributes table contains at least bounds of the node by 1-based line
-  and column numbers.
+  and column numbers along with 0-based positions.
   ``
   [zloc]
   (get (j/node zloc) 1))
@@ -2493,7 +2567,7 @@
       j/down
       j/attrs)
   # =>
-  @{:bc 1 :bl 1 :ec 8 :el 1}
+  @{:bl 1 :el 1 :bc 1 :ep 7 :bp 0 :ec 8}
 
   )
 
@@ -2512,24 +2586,24 @@
       j/zip-down
       j/node)
   # =>
-  [:tuple @{:bc 1 :bl 1 :ec 8 :el 1}
-   [:symbol @{:bc 2 :bl 1 :ec 3 :el 1} "+"]
-   [:whitespace @{:bc 3 :bl 1 :ec 4 :el 1} " "]
-   [:number @{:bc 4 :bl 1 :ec 5 :el 1} "1"]
-   [:whitespace @{:bc 5 :bl 1 :ec 6 :el 1} " "]
-   [:number @{:bc 6 :bl 1 :ec 7 :el 1} "3"]]
+  [:tuple @{:bl 1 :el 1 :bc 1 :ep 7 :bp 0 :ec 8}
+   [:symbol @{:bl 1 :el 1 :bc 2 :ep 2 :bp 1 :ec 3} "+"]
+   [:whitespace @{:bl 1 :el 1 :bc 3 :ep 3 :bp 2 :ec 4} " "]
+   [:number @{:bl 1 :el 1 :bc 4 :ep 4 :bp 3 :ec 5} "1"]
+   [:whitespace @{:bl 1 :el 1 :bc 5 :ep 5 :bp 4 :ec 6} " "]
+   [:number @{:bl 1 :el 1 :bc 6 :ep 6 :bp 5 :ec 7} "3"]]
 
   (-> (j/par "(/ 1 8)")
       j/zip-down
       j/root)
   # =>
-  @[:code @{:bc 1 :bl 1 :ec 8 :el 1}
-    [:tuple @{:bc 1 :bl 1 :ec 8 :el 1}
-            [:symbol @{:bc 2 :bl 1 :ec 3 :el 1} "/"]
-            [:whitespace @{:bc 3 :bl 1 :ec 4 :el 1} " "]
-            [:number @{:bc 4 :bl 1 :ec 5 :el 1} "1"]
-            [:whitespace @{:bc 5 :bl 1 :ec 6 :el 1} " "]
-            [:number @{:bc 6 :bl 1 :ec 7 :el 1} "8"]]]
+  @[:code @{:bl 1 :el 1 :bc 1 :ep 7 :bp 0 :ec 8}
+    [:tuple @{:bl 1 :el 1 :bc 1 :ep 7 :bp 0 :ec 8}
+     [:symbol @{:bl 1 :el 1 :bc 2 :ep 2 :bp 1 :ec 3} "/"]
+     [:whitespace @{:bl 1 :el 1 :bc 3 :ep 3 :bp 2 :ec 4} " "]
+     [:number @{:bl 1 :el 1 :bc 4 :ep 4 :bp 3 :ec 5} "1"]
+     [:whitespace @{:bl 1 :el 1 :bc 5 :ep 5 :bp 4 :ec 6} " "]
+     [:number @{:bl 1 :el 1 :bc 6 :ep 6 :bp 5 :ec 7} "8"]]]
 
   )
 
@@ -2563,7 +2637,7 @@
       j/right-skip-wsc
       j/node)
   # =>
-  [:symbol @{:bc 1 :bl 2 :ec 2 :el 2} "+"]
+  [:symbol @{:bl 2 :el 2 :bc 1 :ep 13 :bp 12 :ec 2} "+"]
 
   (-> (j/par "(:a)")
       j/zip-down
@@ -2605,7 +2679,7 @@
       j/left-skip-wsc
       j/node)
   # =>
-  [:symbol @{:bc 1 :bl 2 :ec 2 :el 2} "+"]
+  [:symbol @{:bl 2 :el 2 :bc 1 :ep 13 :bp 12 :ec 2} "+"]
 
   (-> (j/par "(:a)")
       j/zip-down
@@ -2643,7 +2717,7 @@
       j/right-skip-ws
       j/node)
   # =>
-  [:comment @{:bc 3 :bl 1 :ec 13 :el 1} "# hi there"]
+  [:comment @{:bl 1 :el 1 :bc 3 :ep 12 :bp 2 :ec 13} "# hi there"]
 
   (-> (j/par "(:a)")
       j/zip-down
@@ -2682,7 +2756,7 @@
       j/left-skip-ws
       j/node)
   # =>
-  [:comment @{:bc 2 :bl 1 :ec 12 :el 1} "# hi there"]
+  [:comment @{:bl 1 :el 1 :bc 2 :ep 11 :bp 1 :ec 12} "# hi there"]
 
   (-> (j/par "(:a)")
       j/zip-down
@@ -2706,26 +2780,27 @@
   (var _verify/test-results @[])
 
   (defmacro _verify/is
-    [t-form e-form line-no name]
+    [t-form e-form line-no name & rest]
     (with-syms [$ts $tr
                 $es $er]
       ~(do
-         (def [,$ts ,$tr] (protect (eval ',t-form)))
-         (def [,$es ,$er] (protect (eval ',e-form)))
-         (array/push _verify/test-results
-                     @{:test-form ',t-form
-                       :test-status ,$ts
-                       :test-value ,$tr
-                       #
-                       :expected-form ',e-form
-                       :expected-status ,$es
-                       :expected-value ,$er
-                       #
-                       :line-no ,line-no
-                       :name ,name
-                       :passed (if (and ,$ts ,$es)
-                                 (deep= ,$tr ,$er)
-                                 nil)})
+         (def [,$ts ,$tr] (as-macro ,protect (,eval ',t-form)))
+         (def [,$es ,$er] (as-macro ,protect (,eval ',e-form)))
+         (,array/push _verify/test-results
+                      @{:test-form ',t-form
+                        :test-status ,$ts
+                        :test-value ,$tr
+                        #
+                        :expected-form ',e-form
+                        :expected-status ,$es
+                        :expected-value ,$er
+                        #
+                        :line-no ,line-no
+                        :name ,name
+                        :rest ',rest
+                        :passed (if (as-macro ,and ,$ts ,$es)
+                                  (,deep= ,$tr ,$er)
+                                  nil)})
          ,name)))
 
   (defn _verify/start-tests
@@ -2814,8 +2889,8 @@
                                                     "=>"
                                                     (capture (thru -1)))
                                          content)
-                              no-hash-left (nil? (string/find "#" l))
-                              no-hash-right (nil? (string/find "#" r))]
+                              _no-hash-left (nil? (string/find "#" l))
+                              _no-hash-right (nil? (string/find "#" r))]
                        (do
                          (set label-left (string/trim l))
                          (set label-right (string/trim r))
@@ -2936,25 +3011,25 @@
 
   (j/node ti-zloc)
   # =>
-  [:comment @{:bc 3 :bl 6 :ec 7 :el 6} "# =>"]
+  [:comment @{:bc 3 :bl 6 :bp 42 :ec 7 :el 6 :ep 46} "# =>"]
 
   (def test-expr-zloc (r/find-test-expr ti-zloc))
 
   (j/node test-expr-zloc)
   # =>
-  [:tuple @{:bc 3 :bl 5 :ec 17 :el 5}
-   [:symbol @{:bc 4 :bl 5 :ec 7 :el 5} "put"]
-   [:whitespace @{:bc 7 :bl 5 :ec 8 :el 5} " "]
-   [:table @{:bc 8 :bl 5 :ec 11 :el 5}]
-   [:whitespace @{:bc 11 :bl 5 :ec 12 :el 5} " "]
-   [:keyword @{:bc 12 :bl 5 :ec 14 :el 5} ":a"]
-   [:whitespace @{:bc 14 :bl 5 :ec 15 :el 5} " "]
-   [:number @{:bc 15 :bl 5 :ec 16 :el 5} "2"]]
+  [:tuple @{:bc 3 :bl 5 :bp 25 :ec 17 :el 5 :ep 39}
+   [:symbol @{:bc 4 :bl 5 :bp 26 :ec 7 :el 5 :ep 29} "put"]
+   [:whitespace @{:bc 7 :bl 5 :bp 29 :ec 8 :el 5 :ep 30} " "]
+   [:table @{:bc 8 :bl 5 :bp 30 :ec 11 :el 5 :ep 33}]
+   [:whitespace @{:bc 11 :bl 5 :bp 33 :ec 12 :el 5 :ep 34} " "]
+   [:keyword @{:bc 12 :bl 5 :bp 34 :ec 14 :el 5 :ep 36} ":a"]
+   [:whitespace @{:bc 14 :bl 5 :bp 36 :ec 15 :el 5 :ep 37} " "]
+   [:number @{:bc 15 :bl 5 :bp 37 :ec 16 :el 5 :ep 38} "2"]]
 
   (-> (j/left test-expr-zloc)
       j/node)
   # =>
-  [:whitespace @{:bc 1 :bl 5 :ec 3 :el 5} "  "]
+  [:whitespace @{:bc 1 :bl 5 :bp 23 :ec 3 :el 5 :ep 25} "  "]
 
   )
 
@@ -3047,26 +3122,26 @@
 
   (j/node ti-zloc)
   # =>
-  [:comment @{:bc 3 :bl 6 :ec 7 :el 6} "# =>"]
+  [:comment @{:bc 3 :bl 6 :bp 42 :ec 7 :el 6 :ep 46} "# =>"]
 
   (def expected-expr-zloc (r/find-expected-expr ti-zloc))
 
   (j/node expected-expr-zloc)
   # =>
-  [:table @{:bc 3 :bl 7 :ec 10 :el 8}
-   [:keyword @{:bc 5 :bl 7 :ec 7 :el 7} ":a"]
-   [:whitespace @{:bc 7 :bl 7 :ec 8 :el 7} " "]
-   [:number @{:bc 8 :bl 7 :ec 9 :el 7} "1"]
-   [:whitespace @{:bc 9 :bl 7 :ec 1 :el 8} "\n"]
-   [:whitespace @{:bc 1 :bl 8 :ec 5 :el 8} "    "]
-   [:keyword @{:bc 5 :bl 8 :ec 7 :el 8} ":b"]
-   [:whitespace @{:bc 7 :bl 8 :ec 8 :el 8} " "]
-   [:number @{:bc 8 :bl 8 :ec 9 :el 8} "2"]]
+  [:table @{:bc 3 :bl 7 :bp 49 :ec 10 :el 8 :ep 65}
+   [:keyword @{:bc 5 :bl 7 :bp 51 :ec 7 :el 7 :ep 53} ":a"]
+   [:whitespace @{:bc 7 :bl 7 :bp 53 :ec 8 :el 7 :ep 54} " "]
+   [:number @{:bc 8 :bl 7 :bp 54 :ec 9 :el 7 :ep 55} "1"]
+   [:whitespace @{:bc 9 :bl 7 :bp 55 :ec 1 :el 8 :ep 56} "\n"]
+   [:whitespace @{:bc 1 :bl 8 :bp 56 :ec 5 :el 8 :ep 60} "    "]
+   [:keyword @{:bc 5 :bl 8 :bp 60 :ec 7 :el 8 :ep 62} ":b"]
+   [:whitespace @{:bc 7 :bl 8 :bp 62 :ec 8 :el 8 :ep 63} " "]
+   [:number @{:bc 8 :bl 8 :bp 63 :ec 9 :el 8 :ep 64} "2"]]
 
   (-> (j/left expected-expr-zloc)
       j/node)
   # =>
-  [:whitespace @{:bc 1 :bl 7 :ec 3 :el 7} "  "]
+  [:whitespace @{:bc 1 :bl 7 :bp 47 :ec 3 :el 7 :ep 49} "  "]
 
   (def src
     (string "(comment"                eol
@@ -3086,7 +3161,7 @@
 
   (j/node ti-zloc)
   # =>
-  [:comment @{:bc 3 :bl 4 :ec 16 :el 4} "# => @[:a :b]"]
+  [:comment @{:bc 3 :bl 4 :bp 36 :ec 16 :el 4 :ep 49} "# => @[:a :b]"]
 
   (r/find-expected-expr ti-zloc)
   # =>
@@ -3180,7 +3255,7 @@
   )
 
 (defn r/wrap-as-test-call
-  [start-zloc end-zloc ti-line-no test-label]
+  [start-zloc end-zloc ti-line-no test-label {:bp bp :ep ep :bc bc}]
   # XXX: hack - not sure if robust enough
   (def eol-str (if (= :windows (os/which)) "\r\n" "\n"))
   (-> (j/wrap start-zloc [:tuple @{}] end-zloc)
@@ -3196,7 +3271,16 @@
       (j/append-child [:number @{} (string ti-line-no)])
       #
       (j/append-child [:whitespace @{} " "])
-      (j/append-child [:string @{} test-label])))
+      (j/append-child [:string @{} test-label])
+      # start position of test expression
+      (j/append-child [:whitespace @{} " "])
+      (j/append-child [:number @{} (string bp)])
+      # end position of test expression
+      (j/append-child [:whitespace @{} " "])
+      (j/append-child [:number @{} (string ep)])
+      # start column of test expression; adjust to 0-based
+      (j/append-child [:whitespace @{} " "])
+      (j/append-child [:number @{} (string (dec bc))])))
 
 (comment
 
@@ -3219,7 +3303,8 @@
                      left-of-t-zloc
                      #
                      t-zloc)
-        w-zloc (r/wrap-as-test-call start-zloc e-zloc "3" `""`)]
+        w-zloc (r/wrap-as-test-call start-zloc e-zloc 3 `""`
+                                  (get (j/node t-zloc) 1))]
     (j/gen (j/node w-zloc)))
   # =>
   (string "(_verify/is\n"
@@ -3227,7 +3312,10 @@
           "# =>\n"
           "2 "
           "3 "
-          `""`
+          `"" `
+          "0 "
+          "7 "
+          "0"
           ")")
 
   )
@@ -3259,11 +3347,12 @@
                  # XXX: use `attrs` here?
                  ti-line-no ((get (j/node ti-zloc) 1) :bl)
                  test-label
-                 (string/format `"%s"`
+                 (string/format "%q"
                                 (r/make-label label-left label-right))]
              (set found-test true)
              (r/wrap-as-test-call start-zloc end-zloc
-                                ti-line-no test-label)))))
+                                ti-line-no test-label
+                                (get (j/node test-expr-zloc) 1))))))
   # navigate back out to top of block
   (when found-test
     # morph comment block into plain tuple -- to be unwrapped later
@@ -3302,19 +3391,19 @@
       j/root
       j/gen)
   # =>
-  (string "( "                     eol
+  (string "( "                             eol
           eol
-          "  (def a 1)"            eol
+          "  (def a 1)"                    eol
           eol
-          "  (_verify/is"          eol
-          "  (put @{} :a 2)"       eol
-          "  # left =>"            eol
-          `  @{:a 2} 6 "left =>")` eol
+          "  (_verify/is"                  eol
+          "  (put @{} :a 2)"               eol
+          "  # left =>"                    eol
+          `  @{:a 2} 6 "left =>" 25 39 2)` eol
           eol
-          "  (_verify/is"          eol
-          "  (+ 1 1)"              eol
-          "  # => right"           eol
-          `  2 10 "=> right")`     eol
+          "  (_verify/is"                  eol
+          "  (+ 1 1)"                      eol
+          "  # => right"                   eol
+          `  2 10 "=> right" 65 72 2)`     eol
           eol
           "  :smile)")
 
@@ -3349,19 +3438,19 @@
 
   (r/rewrite-comment-block src)
   # =>
-  (string "( "                      eol
+  (string "( "                              eol
           eol
-          "  (def a 1)"             eol
+          "  (def a 1)"                     eol
           eol
-          "  (_verify/is"           eol
-          "  (put @{} :a 2)"        eol
-          "  # =>"                  eol
-          `  @{:a 2} 6 "")`         eol
+          "  (_verify/is"                   eol
+          "  (put @{} :a 2)"                eol
+          "  # =>"                          eol
+          `  @{:a 2} 6 "" 25 39 2)`         eol
           eol
-          "  (_verify/is"           eol
-          "  (+ 1 1)"               eol
-          "  # left => right"       eol
-          `  2 10 "left => right")` eol
+          "  (_verify/is"                   eol
+          "  (+ 1 1)"                       eol
+          "  # left => right"               eol
+          `  2 10 "left => right" 60 67 2)` eol
           eol
           "  :smile)")
 
@@ -3456,49 +3545,49 @@
   (r/rewrite src)
   # =>
   (string eol
-          `(require "json")`     eol
+          `(require "json")`               eol
           eol
-          "(defn my-fn"          eol
-          "  [x]"                eol
-          "  (+ x 1))"           eol
+          "(defn my-fn"                    eol
+          "  [x]"                          eol
+          "  (+ x 1))"                     eol
           eol
-          " "                    eol
+          " "                              eol
           eol
-          "  (def a 1)"          eol
+          "  (def a 1)"                    eol
           eol
-          "  (_verify/is"        eol
-          "  (put @{} :a 2)"     eol
-          "  # =>"               eol
-          `  @{:a 2} 12 "")`     eol
+          "  (_verify/is"                  eol
+          "  (put @{} :a 2)"               eol
+          "  # =>"                         eol
+          `  @{:a 2} 12 "" 73 87 2)`       eol
           eol
-          "  (_verify/is"        eol
-          "  (my-fn 1)"          eol
-          "  # =>"               eol
-          `  2 16 "")`           eol
+          "  (_verify/is"                  eol
+          "  (my-fn 1)"                    eol
+          "  # =>"                         eol
+          `  2 16 "" 108 117 2)`           eol
           eol
-          "  :smile"             eol
+          "  :smile"                       eol
           eol
-          "(defn your-fn"        eol
-          "  [y]"                eol
-          "  (* y y))"           eol
+          "(defn your-fn"                  eol
+          "  [y]"                          eol
+          "  (* y y))"                     eol
           eol
-          " "                    eol
+          " "                              eol
           eol
-          "  (_verify/is"        eol
-          "  (your-fn 3)"        eol
-          "  # =>"               eol
-          `  9 28 "")`           eol
+          "  (_verify/is"                  eol
+          "  (your-fn 3)"                  eol
+          "  # =>"                         eol
+          `  9 28 "" 179 190 2)`           eol
           eol
-          "  (def b 1)"          eol
+          "  (def b 1)"                    eol
           eol
-          "  (_verify/is"        eol
-          "  (+ b 1)"            eol
-          "  # =>"               eol
-          `  2 34 "")`           eol
+          "  (_verify/is"                  eol
+          "  (+ b 1)"                      eol
+          "  # =>"                         eol
+          `  2 34 "" 218 225 2)`           eol
           eol
-          "  (def c 2)"          eol
+          "  (def c 2)"                    eol
           eol
-          "  :smile"             eol)
+          "  :smile"                       eol)
 
   )
 
@@ -3530,24 +3619,24 @@
   (r/rewrite src)
   # =>
   (string eol
-          " "               eol
+          " "                        eol
           eol
-          "  (_verify/is"   eol
-          "  (-> ``"        eol
-          "      123456789" eol
-          "      ``"        eol
-          "      length)"   eol
-          "  # =>"          eol
-          `  9 7 "")`       eol
+          "  (_verify/is"            eol
+          "  (-> ``"                 eol
+          "      123456789"          eol
+          "      ``"                 eol
+          "      length)"            eol
+          "  # =>"                   eol
+          `  9 7 "" 12 57 2)`        eol
           eol
-          "  (_verify/is"   eol
-          "  (->"           eol
-          "    ``"          eol
-          "    123456789"   eol
-          "    ``"          eol
-          "    length)"     eol
-          "  # =>"          eol
-          `  9 15 "")`      eol
+          "  (_verify/is"            eol
+          "  (->"                    eol
+          "    ``"                   eol
+          "    123456789"            eol
+          "    ``"                   eol
+          "    length)"              eol
+          "  # =>"                   eol
+          `  9 15 "" 72 115 2)`      eol
           eol
           "  :smile")
 
@@ -3577,7 +3666,7 @@
   (var found-test nil)
   # process comment block content
   (while (not (j/end? curr-zloc))
-    (def [ti-zloc label-left label-right] (r/find-test-indicator curr-zloc))
+    (def [ti-zloc _label-left _label-right] (r/find-test-indicator curr-zloc))
     (when (not ti-zloc)
       (break))
     #
@@ -3587,7 +3676,7 @@
                  (nil? expected-expr-zloc))
            (j/right curr-zloc) # next
            # found a complete test, work on rewriting
-           (let [eol-str (if (= :windows (os/which)) "\r\n" "\n")]
+           (do
              (set found-test true)
              (-> (j/wrap expected-expr-zloc [:tuple @{}])
                  (j/insert-child [:whitespace @{} " "])
@@ -3834,11 +3923,6 @@
   )
 
 
-(comment import ./tests :prefix "")
-(comment import ./errors :prefix "")
-
-(comment import ./rewrite :prefix "")
-
 (comment import ./paths :prefix "")
 
 
@@ -3863,9 +3947,9 @@
   (def b {:in "make-tests" :args {:in-path in-path :opts opts}})
   #
   (def src (slurp in-path))
-  (def [ok? _] (protect (parse-all src)))
+  (def [ok? result] (protect (parse-all src)))
   (when (not ok?)
-    (break :parse-error))
+    (e/emf b "parse error: %s" result))
   #
   (def test-src (r/rewrite-as-test-file src))
   (when (not test-src)
@@ -3956,30 +4040,14 @@
 
   )
 
-(defn t/make-lint-path
-  [in-path]
-  #
-  (string (t/make-test-path in-path) "-lint"))
-
-(comment
-
-  (t/make-lint-path "tmp/hello.janet")
-  # =>
-  "tmp/_hello.janet.niche-lint"
-
-  )
-
-(defn t/lint-and-get-error
-  [input]
-  (def lint-path (t/make-lint-path input))
-  (defer (os/rm lint-path)
-    (def lint-src (r/rewrite-as-file-to-lint (slurp input)))
-    (spit lint-path lint-src)
-    (def lint-buf @"")
-    (with-dyns [:err lint-buf] (flycheck lint-path))
-    # XXX: peg may need work
-    (peg/match ~(sequence "error: " (to ":") (capture (to "\n")))
-               lint-buf)))
+# example of first line of err-str:
+#
+#   error: d/_n.janet.niche:142:38: compile error: unknown symbol _
+(defn t/parse-error
+  [err-str]
+  (peg/match ~(sequence (thru "error: ")
+                        (capture (to "\n")))
+             err-str))
 
 (defn t/has-unreadable?
   [test-results]
@@ -4012,12 +4080,16 @@
   (def test-path result)
   # run tests and collect output
   (def [exit-code out err] (t/run-tests test-path))
-  (os/rm test-path)
   #
   (when (empty? out)
-    (if (t/lint-and-get-error input)
-      (break [:lint-error nil nil nil])
-      (break [:test-run-error nil nil nil])))
+    (when (t/parse-error err)
+      (def extra (if (os/getenv "VERBOSE")
+                   "see stacktrace below"
+                   "rerun with VERBOSE=1 for details"))
+      (e/emf (merge b {:stacktrace err})
+             "error running test file, %s" extra)))
+  #
+  (os/rm test-path)
   #
   (def [test-results test-out] (t/parse-output out))
   (when-let [unreadable (t/has-unreadable? test-results)]
@@ -4045,25 +4117,7 @@
                 n-ps-paths))
     (when (not (empty? fl-paths))
       (l/notenf :i "Test failures in %d of %d file(s)."
-                n-fl-paths (+ n-fl-paths n-ps-paths))))
-  # errors
-  (def p-paths (get noted-paths :parse))
-  (def l-paths (get noted-paths :lint))
-  (def r-paths (get noted-paths :run))
-  (def err-paths [p-paths l-paths r-paths])
-  #
-  (when (some |(not (empty? $)) err-paths)
-    (def num-skipped (sum (map length err-paths)))
-    (l/notenf :w "Skipped %d files(s)." num-skipped))
-  (when (not (empty? p-paths))
-    (l/notenf :w "%s: parse error(s) detected in %d file(s)."
-              (o/color-msg "WARNING" :red) (length p-paths)))
-  (when (not (empty? l-paths))
-    (l/notenf :w "%s: linting error(s) detected in %d file(s)."
-              (o/color-msg "WARNING" :yellow) (length l-paths)))
-  (when (not (empty? r-paths))
-    (l/notenf :w "%s: runtime error(s) detected for %d file(s)."
-              (o/color-msg "WARNING" :yellow) (length r-paths))))
+                n-fl-paths (+ n-fl-paths n-ps-paths)))))
 
 ########################################################################
 
@@ -4072,15 +4126,13 @@
   # try to make and run tests, then collect output
   (def [exit-code test-results test-out test-err]
     (t/make-and-run input opts))
-  (when (get (invert [:no-tests
-                      :parse-error :lint-error :test-run-error])
-             exit-code)
-    (break [exit-code nil nil]))
+  (when (= :no-tests exit-code)
+    (break [:no-tests nil nil]))
   #
   (def {:report report} opts)
   (default report o/report)
   # print out results
-  (report test-results test-out test-err)
+  (report input test-results test-out test-err)
   #
   (when (not= 0 exit-code)
     (break [:exit-code test-results]))
@@ -4096,21 +4148,6 @@
   (case desc
     :no-tests
     (l/noten :i " - no tests found")
-    #
-    :parse-error
-    (let [msg (o/color-msg "detected parse errors" :red)]
-      (l/notenf :w " - %s" msg)
-      (array/push (get noted-paths :parse) path))
-    #
-    :lint-error
-    (let [msg (o/color-msg "detected lint errors" :yellow)]
-      (l/notenf :w " - %s" msg)
-      (array/push (get noted-paths :lint) path))
-    #
-    :test-run-error
-    (let [msg (o/color-msg "test file had runtime errors" :yellow)]
-      (l/notenf :w " - %s" msg)
-      (array/push (get noted-paths :run) path))
     #
     :no-fails
     (let [n-tests (get tr :num-tests)
@@ -4130,8 +4167,7 @@
 (defn c/make-run-report
   [src-paths opts]
   (def excludes (get opts :excludes))
-  (def noted-paths @{:parse @[] :lint @[] :run @[]
-                     :pass @[] :fail @[]})
+  (def noted-paths @{:pass @[] :fail @[]})
   (def test-results @[])
   # generate tests, run tests, and report
   (each path src-paths
@@ -4150,6 +4186,439 @@
   [exit-code test-results])
 
 
+(comment import ./docs :prefix "")
+(def d/usage
+  ``
+  Usage: niche [<file-or-dir>...]
+
+         niche [--help|[-h[h[h[h]]]]]
+         niche [-v|--version]
+
+  Nimbly Interpret Comment-Hidden Expressions
+
+  Parameters:
+
+    <file-or-dir>          path to file or directory
+
+  Options:
+
+    -h, --help             show this output
+    -hh                    show background material
+    -hhh                   show tutorial
+    -hhhh                  show reference
+
+    -v, --version          show version information
+
+  Configuration:
+
+    .niche.jdn             configuration file
+
+  Example uses:
+
+    1. Create and run comment-hidden expression tests in `src/`
+       directory:
+
+       $ niche src
+
+    2. A configuration file (`.niche.jdn`) can be used to
+       specify paths to operate on and avoid spelling out paths
+       at the command line:
+
+       $ niche
+
+    3. `niche` can be used via `jeep`, `jpm`, etc. with some
+       setup.  In a project's root directory, create a suitable
+       `.niche.jdn` file and a runner file in the project's
+       `test/` subdirectory.  Then, in the case of `jeep`:
+
+       $ jeep test
+
+  Example `.niche.jdn` configuration file:
+
+    {# what to work on - file and dir paths
+     :includes ["src" "bin/my-script"]
+     # what to skip - file paths only
+     :excludes ["src/sample.janet"]}
+
+  Example runner file `test/trigger-niche.janet`:
+
+    # adjust the path as needed
+    (import ../niche) # niche.janet is in project root
+
+    (niche/main)
+  ``)
+
+(def d/background
+  ``
+  Background
+  ==========
+
+  Introduction
+  ------------
+
+  While developing a function [1], it is probably not too
+  uncommon to become curious about how the function in its
+  current state actually behaves.  In such a situation, it
+  seems likely one may end up calling the function with
+  specific arguments to observe the results.
+
+  This process of calling the function as it is developed may
+  be repeated multiple times.  It is a curious thing that it is
+  not unusual for these calls and their results to be
+  discarded and subsequently to manually enter some of them
+  again.
+
+  What if it were very easy to keep these around and
+  conveniently re-execute them to check their results as the
+  function in question is worked on?  Perhaps even retaining
+  these saved "calls with their results" afterwards to use for
+  automated testing?
+
+  `niche` is a tool for Janet code to help with this [2].
+
+  Brief Explanation
+  -----------------
+
+  The basic idea is to place appropriate expressions within
+  `comment` forms, apply `niche` to evaluate them, and
+  interpret the results.  A simple example of the type of
+  `comment` form mentioned is:
+
+    (comment
+
+      (function-to-test arg1 arg2)
+      # =>
+      :expected-value
+
+      )
+
+  The content of such `comment` forms is sometimes referred to
+  as "comment-hidden expressions".
+
+  About the Name
+  --------------
+
+  The name `niche` is short for:
+
+    "Nimbly Interpret Comment-Hidden Expressions"
+
+  Goals and Non-goals
+  -------------------
+
+  It is a non-goal of `niche` to be a comprehensive testing
+  tool.  It's more meant to:
+
+  * aid early and exploratory development,
+
+  * provide a way to record testable illustrative examples
+    for future code readers, and
+
+  * be used alongside other testing tools and libraries
+
+  Further Information
+  -------------------
+
+  See the tutorial and/or reference documentation for further
+  details.
+
+  The source code for `niche` (in the `src` directory of the
+  repository) contains tests for `niche` itself using
+  comment-hidden expressions.
+
+  [1] ...or macro or just some expression.
+
+  [2] It's definitely not the first of its kind to provide some
+  support for this idea.  The earliest the author has found for
+  a similar idea goes back to 2008 for the Racket language
+  (`eli-tester`), but it seems unlikely that there were no
+  other attempts.
+
+  Niche is the fifth incarnation in a series of tools for Janet
+  going back to 2020, starting with judge-gen.
+  ``)
+
+(def d/tutorial
+  ``
+  Tutorial
+  ========
+
+  This is a tutorial that introduces basics.  Please see the
+  reference documentation for further details.
+
+  Expressing Tests
+  ----------------
+
+  Create a file named `smile.janet` and put the following
+  content in it:
+
+    (comment
+
+      (+ 1 2)
+      # =>
+      3
+
+      )
+
+  Some things to note:
+
+  1. There is a surrounding `comment` form.
+
+  2. There is an instance of `# =>` that indicates the presence
+     of a test.
+
+  3. The expression above `# =>` is intended to compute an
+     "actual" value.
+
+  4. The expression below `# =>` is intended to compute an
+     "expected" value.
+
+  So to express a test, put an expression to "test" which
+  computes an "actual" value before another expression which is
+  used to arrive at an expected value, and separate them by an
+  instance of `# =>` on a line of its own.
+
+  Some terminology:
+
+  1. `# =>` is sometimes referred to as a "test indicator".
+     It is modeled after sequences of characters sometimes used
+     in various lisp communities to express "what comes before
+     evaluates to what comes after".
+
+  2. Expressions within the `comment` form may sometimes be
+     referred to as "comment-hidden expressions".
+
+  The use of the `comment` form means:
+
+  1. The content doesn't really affect the meaning of existing
+     code in a file according to `janet`.
+
+  2. We can start writing tests without installing `niche`.
+     Expressions can still be evaluated by "sending" them to a
+     REPL, either via editor tooling or by copy-pasting.
+
+  3. Your code doesn't gain any additional library dependencies,
+     whether `niche` is installed or not.
+
+  Using the `niche` tool
+  ----------------------
+
+  Re-evaluating things manually can get old pretty quickly
+  though so obtaining `niche.janet` and putting or symlinking it
+  on your `PATH` is recommended for convenience.
+
+  To run the tests, pass the path of the file with the `comment`
+  form in it to `niche`:
+
+    $ niche.janet smile.janet
+
+  or if you created a symlink to `niche.janet` named `niche`:
+
+    $ niche smile.janet
+
+  Interpreting `niche` output
+  ---------------------------
+
+  If all went well, the following sort of output should appear:
+
+    smile.janet - [1/1]
+    ===================================================
+    All tests successful in 1 file(s).
+    Total processing time was 0.00 secs.
+
+  Try changing the expected value from `3` to `11` in
+  `smile.janet` like:
+
+    (comment
+
+      (+ 1 2)
+      # =>
+      11
+
+      )
+
+  Now run `niche` again:
+
+    $ niche smile.janet
+
+  The output should look something like:
+
+    smile.janet
+    ---------------------------------------------------
+    [1]
+
+    failed:
+    line 4
+
+    form:
+    (+ 1 2)
+
+    expected:
+    11
+
+    actual:
+    3
+    ---------------------------------------------------
+    [0/1]
+    ===================================================
+    Test failures in 1 of 1 file(s).
+    Total processing time was 0.00 secs.
+
+  It may be obvious but to spell things out a bit:
+
+  * The "smile.janet" at the top indicates which file the
+    immediately following information refers to.
+
+  * There are two "dashed" separators (made up of the `-`
+    character) that "bound" the failure results for
+    "smile.janet".
+
+  * The "[1]" indicates that what follows immediately is the
+    first faliure in the file.
+
+  * The "line 4" portion under "failed:" refers to where the
+    test indicator (`# =>`) is in the file.  This can be useful
+    information when navigating to the relevant code in the
+    source file.
+
+  * The "form:" portion labels what expression was evaluated to
+    arrive at the actual value computed.
+
+  * The "expected:" portion labels what value was expected.
+
+  * The "actual:" portion labels what value was actually
+    computed.
+
+  * The "[0/1]" indicates that no tests passed out of a total of
+    one test detected for the file.
+
+  * The portions below the separator made up of `=` characters
+    summarize the number of failures detected, the total number
+    of associated files with failures, and the total processing
+    time.
+
+  There are some more details that were not covered such as:
+
+  * Multiple test expressions can live in a single `comment`
+    form.
+
+  * Each `comment` can also contain non-test expressions.
+
+  * A `comment` form that has no tests is ignored by `niche`.
+
+  These and other details are covered in the reference
+  documentation.
+  ``)
+
+(def d/reference
+  ``
+  Reference
+  =========
+
+  Anatomy of a Test
+  -----------------
+
+  Tests lives inside `comment` forms.  A simple example is:
+
+    (comment
+
+      (+ 1 2)
+      # =>
+      3
+
+      )
+
+  A general description might be:
+
+    (comment
+
+      <actual-value-expression>
+      <test-indicator>
+      <expected-value-expression>
+
+      )
+
+  `<actual-value-expression>` is used to compute an "actual"
+  value.  The expression may span multiple lines.
+
+  The result value is compared using `deep=` with the result
+  of computing `<expected-value-expression>` (which may also
+  span multiple lines).
+
+  `<test-indicator>` is the sequence of characters `# =>`.
+  (Some other sequences may work, but only `# =>` is intended
+  for general consumption at the moment.)
+
+  Each test indicator should live on a line of its own.  The
+  line number that a test indicator is on is used to report
+  failing tests.
+
+  Some More Details
+  -----------------
+
+  * Multiple tests may appear within a single `comment` form.
+    They are evaluated in order.
+
+  * Forms that are not part of any test may also occur within
+    `comment` forms.  These will also be evaluated in order
+    but only if the containing `comment` form has at least one
+    test in it.  This is done so that "ordinary" `comment`
+    forms that existed prior to `niche`'s existence are not
+    accidentally executed.
+
+  * The expressions within `comment` forms that have tests in
+    them are executed in order, interleaved with other
+    non-comment expressions in the file.  There is no
+    isolation between `comment` forms for the sake of
+    simplicity.
+
+  * Evaluation of expressions within `comment` forms with tests
+    occur as if they were at the top-level.  That is, it is
+    as if the wrapping of `(comment ...)` is removed and only
+    `...` remains for evaluation.
+
+  Limits on Expected Value Expressions
+  ------------------------------------
+
+  * Since expected value expressions get evaluated, if one
+    wishes to express a tuple value, it is recommended to use
+    either square bracket tuples or to quote paren tuples.
+    Using just paren tuples will likely yield an inappropriate
+    result because the expression will be treated as a call.
+
+  * Only expressions that produce "readable" values are
+    supported for actual value and expected value expressions.
+    So expressions that produce non-readable values such as
+    `printf` (which would yield `<cfunction printf>`) may
+    appear to work sometimes, but not in all cases.
+
+  * Since `deep=` is used to compare values, be careful when
+    trying to compare dictionaries that have prototype values.
+    The prototype information is not typically exposed as part
+    of a dictionary's printed representation.  If desired,
+    check prototype information using suitable expressions.
+
+  Disabling Tests
+  ---------------
+
+  * Putting a space character between the `=` and `>` of a
+    test indicator will disable the corresponding test.
+    However, the associated actual and expected value
+    expressions will still be evaluated.
+
+  * Putting a space between the `(` and `c` characters for a
+    `(comment ...)` form will prevent any of the expressions
+    within the `comment` form from being executed.
+  ``)
+
+(defn d/choose-doc
+  [doc-type]
+  (get {:usage d/usage
+        :reference d/reference
+        :tutorial d/tutorial
+        :background d/background}
+       doc-type d/usage))
+
+
 (comment import ./errors :prefix "")
 
 (comment import ./files :prefix "")
@@ -4159,70 +4628,7 @@
 (comment import ./output :prefix "")
 
 
-###########################################################################
-
-(def version "2026-01-13_03-50-18")
-
-(def usage
-  ``
-  Usage: niche [<file-or-dir>...]
-         niche [-h|--help] [-v|--version]
-
-  Nimbly Inspect Comment-Hidden Expressions
-
-  Parameters:
-
-    <file-or-dir>          path to file or directory
-
-  Options:
-
-    -h, --help             show this output
-    -v, --version          show version information
-
-  Configuration:
-
-    .niche.jdn             configuration file
-
-  Examples:
-
-    Create and run tests in `src/` directory:
-
-    $ niche src
-
-    `niche` can be used via `jpm`, `jeep`, etc. with
-    some one-time setup.  Create a suitable `.niche.jdn`
-    file in a project's root directory and a runner
-    file in a project's `test/` subdirectory (see below
-    for further details).
-
-    Run via `jeep test`:
-
-    $ jeep test
-
-    Run via `jpm test`:
-
-    $ jpm test
-
-    Run using the configuration file via direct
-    invocation:
-
-    $ niche
-
-  Example `.niche.jdn` content:
-
-    {# what to work on - file and dir paths
-     :includes ["src" "bin/my-script"]
-     # what to skip - file paths only
-     :excludes ["src/sample.janet"]}
-
-  Example runner file `test/trigger-niche.janet`:
-
-    (import ../niche)
-
-    (niche/main)
-  ``)
-
-########################################################################
+(def version "2026-03-20_08-42-17")
 
 (defn main
   [& args]
@@ -4230,13 +4636,18 @@
   #
   (def opts (a/parse-args (drop 1 args)))
   #
-  (when (get opts :show-help)
-    (l/noten :o usage)
+  (when-let [htype (get opts :show-help)
+             doc-str (d/choose-doc htype)]
+    (l/noten :o doc-str)
     (os/exit 0))
   #
   (when (get opts :show-version)
     (l/noten :o version)
     (os/exit 0))
+  #
+  (when (not (get opts :includes))
+    (l/noten :e "Nothing to operate on.")
+    (os/exit 1))
   #
   (def src-paths
     (f/collect-paths (get opts :includes)
