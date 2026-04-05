@@ -293,7 +293,7 @@ This is to avoid copious output from evaluating certain forms."
   (interactive)
   (pop-to-buffer ajrepl-repl-buffer-name))
 
-(defun ajrepl-load-exerimental ()
+(defun ajrepl-load-experimental ()
   "Load experimental features."
   (interactive)
   ;; not using `require' here because that would mean `load-path'
@@ -324,7 +324,7 @@ This is to avoid copious output from evaluating certain forms."
         ["Start REPL" ajrepl t]
         ["Switch to REPL" ajrepl-switch-to-repl t]
         "--"
-        ["Enable Experimental Features" ajrepl-load-exerimental
+        ["Enable Experimental Features" ajrepl-load-experimental
          (not (featurep 'ajrepl-experiment))]))
     map)
   "Ajrepl interaction mode map.")
