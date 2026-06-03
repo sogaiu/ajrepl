@@ -263,9 +263,9 @@ a column zero target."
         (beginning-of-line)
         (when (looking-at "[ \t]*#")
           (setq end (point))))
-      (when-let ((beg (ajrepl--column-zero-target-backward)))
-        (when-let ((code (ajrepl--helper beg end)))
-          (ajrepl-send-code code))))))
+      (when-let* ((beg (ajrepl--column-zero-target-backward))
+                  (code (ajrepl--helper beg end)))
+        (ajrepl-send-code code)))))
 
 ;; XXX: improve with treesitter?
 (defun ajrepl-send-expression-upscoped ()
@@ -284,9 +284,9 @@ This is to avoid copious output from evaluating certain forms."
         (beginning-of-line)
         (when (looking-at "[ \t]*#")
           (setq end (point))))
-      (when-let ((beg (ajrepl--column-zero-target-backward)))
-        (when-let ((code (ajrepl--helper beg end)))
-          (ajrepl-send-code (format "(upscope\n%s\n:done)" code)))))))
+      (when-let* ((beg (ajrepl--column-zero-target-backward))
+                  (code (ajrepl--helper beg end)))
+        (ajrepl-send-code (format "(upscope\n%s\n:done)" code))))))
 
 (defun ajrepl-switch-to-repl ()
   "Switch to the repl buffer named by `ajrepl-repl-buffer-name`."
