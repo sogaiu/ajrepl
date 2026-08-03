@@ -1,4 +1,4 @@
-;;; ajrepl-experiment.el --- Experimental features
+;;; ajrepl-experiment.el --- Experimental features  -*- lexical-binding: t; -*-
 
 ;;; Commentary:
 
