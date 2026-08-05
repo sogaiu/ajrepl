@@ -55,7 +55,7 @@
 ;;    There should be an Ajrepl menu containing some convenience commands:
 ;;
 ;;      Send buffer
-;;      Send expression at point
+;;      Send last expression
 ;;      Send top-level expression
 ;;      Send expression upscoped
 ;;      Send region
@@ -249,8 +249,8 @@ a column zero target."
                    (setq done t))))))
       (goto-char pos))))
 
-(defun ajrepl-send-expression-at-point ()
-  "Send expression at point."
+(defun ajrepl-send-last-expression ()
+  "Send last expression."
   (interactive)
   (save-excursion
     (let ((end (point)))
@@ -267,9 +267,12 @@ a column zero target."
                   (code (ajrepl--helper beg end)))
         (ajrepl-send-code code)))))
 
+(define-obsolete-function-alias
+  'ajrepl-send-expression-at-point 'ajrepl-send-last-expression "2026-08-05")
+
 ;; XXX: improve with treesitter?
 (defun ajrepl-send-expression-upscoped ()
-  "Send expression at point wrapped in (upscope ... :done).
+  "Send last expression wrapped in (upscope ... :done).
 
 This is to avoid copious output from evaluating certain forms."
   (interactive)
@@ -307,7 +310,7 @@ This is to avoid copious output from evaluating certain forms."
 (defvar ajrepl-interaction-mode-map
   (let ((map (make-sparse-keymap)))
     (define-key map "\C-c\C-b" 'ajrepl-send-buffer)
-    (define-key map "\C-x\C-e" 'ajrepl-send-expression-at-point)
+    (define-key map "\C-x\C-e" 'ajrepl-send-last-expression)
     (define-key map "\C-\M-x" 'ajrepl-send-top-level-expression)
     (define-key map "\C-c\C-u" 'ajrepl-send-expression-upscoped)
     (define-key map "\C-c\C-r" 'ajrepl-send-region)
@@ -316,7 +319,7 @@ This is to avoid copious output from evaluating certain forms."
       "A Janet REPL Interaction Mode Menu"
       '("Ajrepl"
         ["Send buffer" ajrepl-send-buffer t]
-        ["Send expression at point" ajrepl-send-expression-at-point t]
+        ["Send last expression" ajrepl-send-last-expression t]
         ["Send top-level expression" ajrepl-send-top-level-expression t]
         ["Send expression upscoped" ajrepl-send-expression-upscoped t]
         ["Send region" ajrepl-send-region t]

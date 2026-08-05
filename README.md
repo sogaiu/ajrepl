@@ -92,8 +92,8 @@ is likely:
 2. Various forms of sending things to the REPL should be possible, e.g.
 
     * Send buffer (`C-c C-b`)
-    * Send expression at point (`C-x C-e`)
-    * Send top-level expression at point (`C-M-x`)
+    * Send last expression (`C-x C-e`)
+    * Send top-level expression (`C-M-x`)
     * Send expression upscoped (`C-c C-u`) - see below for details
     * Send region (`C-c C-r`)
 
