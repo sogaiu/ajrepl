@@ -366,6 +366,9 @@ The following keys are available in `ajrepl-interaction-mode`:
 (defun ajrepl ()
   "Start ajrepl."
   (interactive)
+  ;; partial check of proper installation
+  (when (not (file-exists-p ajrepl--helper-path))
+    (error "Failed to find helper at: %s" ajrepl--helper-path))
   (let ((start-buffer (current-buffer))
         ;; XXX: work-around
         (better-dir default-directory)
