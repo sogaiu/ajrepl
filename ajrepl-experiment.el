@@ -103,6 +103,34 @@ This is to ascertain the length of data."
            "  \"Ignores the body of the comment.\"\n"
            "  [&])")))
 
+(defun ajrepl-insert-last-eval-result ()
+  "Try to insert the last evaluation result at point.
+
+If a standard janet repl prompt is in use, extraneous text may be
+inserted when the sent expression is multiline.  To avoid such fates,
+use one of the other prompts such as the simple one or the
+timestampified one."
+  (interactive)
+  (save-excursion
+    (let ((original-buffer (current-buffer)))
+      ;; work inside repl buffer
+      (set-buffer ajrepl-repl-buffer-name)
+      (let ((start (marker-position comint-last-input-end))
+            (proc (get-buffer-process (current-buffer))))
+        (when (and start proc)
+          (save-excursion
+            (goto-char start)
+            (when-let ((next-prompt (condition-case nil
+                                        (comint-next-prompt 1)
+                                      (error "comint-next-prompt failed"))))
+              (when (> next-prompt start)
+                (let ((inhibit-field-text-motion t)) ; prompt is "shielded"
+                  (move-beginning-of-line nil))
+                (let ((target (buffer-substring-no-properties start (point))))
+                  ;; insert captured text in appropriate buffer
+                  (set-buffer original-buffer)
+                  (insert target))))))))))
+
 ;; XXX: likely a better way to do this
 
 ;; https://www.gnu.org/software/emacs/manual/html_node/efaq/ \
@@ -141,6 +169,10 @@ This is to ascertain the length of data."
 (define-key-after ajrepl-interaction-mode-map
   [menu-bar ajrepl rrp-item]
   '("Reset repl prompt" . ajrepl-reset-repl-prompt))
+
+(define-key-after ajrepl-interaction-mode-map
+  [menu-bar ajrepl iler-item]
+  '("Insert last eval result" . ajrepl-insert-last-eval-result))
 
 (provide 'ajrepl-experiment)
 
