@@ -131,6 +131,26 @@ timestampified one."
                   (set-buffer original-buffer)
                   (insert target))))))))))
 
+(defun ajrepl-complete-usage ()
+  "Complete usage by inserting the last evaluation result nicely.
+
+Assumes point is right after an expression that has just been evaluated.
+Upon invocation, the following is inserted after point:
+
+* a newline
+* an indented \"# =>\" followed by another newline
+* an indented evaluation result
+
+See `ajrepl-insert-last-eval-result' concerning advice about avoiding
+the use of a standard janet repl prompt."
+  (interactive)
+  (insert "\n")
+  (indent-for-tab-command)
+  (insert "# =>\n")
+  (indent-for-tab-command)
+  (insert "'")
+  (ajrepl-insert-last-eval-result))
+
 ;; XXX: likely a better way to do this
 
 ;; https://www.gnu.org/software/emacs/manual/html_node/efaq/ \
@@ -173,6 +193,10 @@ timestampified one."
 (define-key-after ajrepl-interaction-mode-map
   [menu-bar ajrepl iler-item]
   '("Insert last eval result" . ajrepl-insert-last-eval-result))
+
+(define-key-after ajrepl-interaction-mode-map
+  [menu-bar ajrepl cu-item]
+  '("Complete usage" . ajrepl-complete-usage))
 
 (provide 'ajrepl-experiment)
 
