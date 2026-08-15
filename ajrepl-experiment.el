@@ -126,7 +126,8 @@ timestampified one."
               (when (> next-prompt start)
                 (let ((inhibit-field-text-motion t)) ; prompt is "shielded"
                   (move-beginning-of-line nil))
-                (let ((target (buffer-substring-no-properties start (point))))
+                (let ((target
+                       (buffer-substring-no-properties start (1- (point)))))
                   ;; insert captured text in appropriate buffer
                   (set-buffer original-buffer)
                   (insert target))))))))))
