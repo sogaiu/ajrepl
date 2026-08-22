@@ -120,9 +120,9 @@ timestampified one."
         (when (and start proc)
           (save-excursion
             (goto-char start)
-            (when-let ((next-prompt (condition-case nil
-                                        (comint-next-prompt 1)
-                                      (error "comint-next-prompt failed"))))
+            (when-let* ((next-prompt (condition-case nil
+                                         (comint-next-prompt 1)
+                                       (error "comint-next-prompt failed"))))
               (when (> next-prompt start)
                 (let ((inhibit-field-text-motion t)) ; prompt is "shielded"
                   (move-beginning-of-line nil))
