@@ -82,9 +82,9 @@ is likely:
 
   ```elisp
   (use-package ajrepl
-  :vc (:url "https://github.com/sogaiu/ajrepl"
-  :rev :newest)
-  :hook (janet-ts-mode . ajrepl-interaction-mode))
+    :vc (:url "https://github.com/sogaiu/ajrepl"
+              :rev :newest)
+    :hook (janet-ts-mode . ajrepl-interaction-mode))
   ```
 
   If using `janet-mode`, replace `janet-ts-mode` with `janet-mode` above.
