@@ -76,10 +76,18 @@ is likely:
                 #'ajrepl-interaction-mode))
     ```
 
-### package.el
+### package.el (Emacs 30+)
 
-* Sorry, no support for that.  The manual instructions should work
-  though.
+* Install directly from Git using `use-package`'s built-in `:vc` keyword:
+
+  ```elisp
+  (use-package ajrepl
+  :vc (:url "https://github.com/sogaiu/ajrepl"
+  :rev :newest)
+  :hook (janet-ts-mode . ajrepl-interaction-mode))
+  ```
+
+  If using `janet-mode`, replace `janet-ts-mode` with `janet-mode` above.
 
 ## Usage
 
